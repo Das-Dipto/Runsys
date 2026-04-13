@@ -20,9 +20,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentTabIndex = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  SortOption _currentSort = SortOption.pending;
   DateTime? _filterStart;
   DateTime? _filterEnd;
+  SortOption _currentSort = SortOption.pending;
   FilterOption _currentFilter = FilterOption.high;   // default
 
   final List<String> _tabLabels = [
@@ -273,6 +273,7 @@ class _HomeScreenState extends State<HomeScreen> {
       emptyTitle: _emptyTitle,
       emptySubtitle: _emptySubtitle,
       sortOption: _currentSort,           // ← Passing sort here
+      filterOption: _currentFilter,
     );
   }
 

@@ -6,6 +6,7 @@ import '../../Models/task_model.dart';
 
 // Import SortOption from the bottom sheet file
 import '../../Home/Widgets/sort_bottom_sheet.dart';   // ← This is the important import
+import '../../Home/Widgets/filter_bottom_sheet.dart';   // ← This is the important import
 
 // Import TaskCard from where it is defined
 import '../Screens/today_task_list.dart';
@@ -14,7 +15,8 @@ class GenericTaskList extends StatefulWidget {
   final String dateRange;
   final String emptyTitle;
   final String? emptySubtitle;
-  final SortOption? sortOption;     // Now SortOption is recognized
+  final SortOption? sortOption;
+  final FilterOption? filterOption;     
 
   const GenericTaskList({
     super.key,
@@ -22,6 +24,7 @@ class GenericTaskList extends StatefulWidget {
     required this.emptyTitle,
     this.emptySubtitle,
     this.sortOption,
+    this.filterOption,                    // ← Add this line
   });
 
   @override
@@ -47,9 +50,8 @@ class _GenericTaskListState extends State<GenericTaskList> {
       _loadTasks();
     }
   }
-
   Future<void> _loadTasks() async {
-    print("🔄 _loadTasks called → dateRange: ${widget.dateRange} | Sort: ${widget.sortOption?.label ?? 'none'}");
+    print("🔄 Loading → date: ${widget.dateRange} | Sort: ${widget.sortOption?.label ?? 'none'} | Filter: ${widget.filterOption?.label ?? 'none'}");
 
     setState(() {
       _isLoading = true;
@@ -58,7 +60,8 @@ class _GenericTaskListState extends State<GenericTaskList> {
 
     final result = await ApiController.getFilteredTasks(
       dateRange: widget.dateRange == "all" ? null : widget.dateRange,
-      sortOption: widget.sortOption,        // ← This line was missing or incorrect
+      sortOption: widget.sortOption,
+      filterOption: widget.filterOption,     // ← Add this line
     );
 
     if (!mounted) return;
@@ -68,7 +71,6 @@ class _GenericTaskListState extends State<GenericTaskList> {
         _tasks = result['data'] ?? [];
         _isLoading = false;
       });
-      print("✅ Loaded ${_tasks.length} tasks");
     } else {
       setState(() {
         _error = result['message'];

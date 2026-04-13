@@ -4,6 +4,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../Home/Widgets/sort_bottom_sheet.dart';
+import '../Home/Widgets/filter_bottom_sheet.dart';
 
 class ApiController {
   static const String _baseUrl = 'http://159.65.156.164:5000';
@@ -99,7 +100,8 @@ class ApiController {
 
   static Future<Map<String, dynamic>> getFilteredTasks({
     String? dateRange,        // "today", "tomorrow", "this_week", "all"
-    SortOption? sortOption,   // ← New: Accept SortOption
+    SortOption? sortOption,   // For status: PENDING, IN_PROGRESS
+    FilterOption? filterOption, // For priority: URGENT, HIGH
     int? page,
     int? limit,
   }) async {
@@ -109,13 +111,14 @@ class ApiController {
 
       final queryParams = <String, String>{};
 
+      // Date Range
       if (dateRange != null && dateRange != "all") {
         queryParams['date_range'] = dateRange;
       }
 
-      // Convert SortOption to status query parameter
+      // Sort Option → status
       if (sortOption != null) {
-        String statusValue;
+        String statusValue = '';
         switch (sortOption) {
           case SortOption.pending:
             statusValue = "PENDING";
@@ -123,9 +126,26 @@ class ApiController {
           case SortOption.inProgress:
             statusValue = "IN_PROGRESS";
             break;
-          // Add more cases later if needed
         }
-        queryParams['status'] = statusValue;
+        if (statusValue.isNotEmpty) {
+          queryParams['status'] = statusValue;
+        }
+      }
+
+      // Filter Option → priority
+      if (filterOption != null) {
+        String priorityValue = '';
+        switch (filterOption) {
+          case FilterOption.high:
+            priorityValue = "HIGH";
+            break;
+          case FilterOption.urgent:
+            priorityValue = "URGENT";
+            break;
+        }
+        if (priorityValue.isNotEmpty) {
+          queryParams['priority'] = priorityValue;
+        }
       }
 
       final uri = Uri.parse('$_baseUrl/api/v1/app_task/my-tasks')
@@ -159,8 +179,6 @@ class ApiController {
       };
     }
   }
-
-
   static Future<Map<String, dynamic>> getTaskDetail(int taskId) async {
   try {
     final prefs = await SharedPreferences.getInstance();
