@@ -8,6 +8,7 @@ import '../../Task/screens/all_task_list.dart';
 import '../../Task/screens/tomorrow_task_list.dart';
 import '../../Task/screens/week_task_list.dart';
 import '../../Task/widgets/generic_task_list.dart';
+import '../Widgets/filter_bottom_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,6 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
   SortOption _currentSort = SortOption.pending;
   DateTime? _filterStart;
   DateTime? _filterEnd;
+  FilterOption _currentFilter = FilterOption.high;   // default
 
   final List<String> _tabLabels = [
     'TODAY',
@@ -56,6 +58,19 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() => _currentSort = result);
     }
   }
+
+  Future<void> _openFilterSheet() async {
+  final result = await showModalBottomSheet<FilterOption>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (_) => FilterBottomSheet(currentFilter: _currentFilter),
+  );
+  if (result != null) {
+    setState(() => _currentFilter = result);
+    // TODO: Later pass _currentFilter to GenericTaskList for API filtering
+  }
+}
 
   Future<void> _openDateRangeSheet() async {
     final result = await showModalBottomSheet<Map<String, DateTime?>>(
@@ -155,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.filter_list_rounded, size: 22),
             color: _textSec,
-            onPressed: () {},
+            onPressed: _openFilterSheet,
           ),
           IconButton(
             icon: const Icon(Icons.search_rounded, size: 22),

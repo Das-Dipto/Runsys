@@ -58,6 +58,7 @@ class _GenericTaskListState extends State<GenericTaskList> {
 
     final result = await ApiController.getFilteredTasks(
       dateRange: widget.dateRange == "all" ? null : widget.dateRange,
+      sortOption: widget.sortOption,        // ← This line was missing or incorrect
     );
 
     if (!mounted) return;
@@ -73,10 +74,8 @@ class _GenericTaskListState extends State<GenericTaskList> {
         _error = result['message'];
         _isLoading = false;
       });
-      print("❌ Error: ${_error}");
     }
   }
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
