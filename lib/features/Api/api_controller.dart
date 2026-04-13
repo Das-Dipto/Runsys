@@ -97,6 +97,61 @@ class ApiController {
   }
 
 
+    // NEW: Powerful filtered tasks API (recommended to use this)
+  static Future<Map<String, dynamic>> getFilteredTasks({
+    String? dateRange,     // "today", "tomorrow", "this_week", "next_week", "all"
+    String? status,        // "PENDING", "IN_PROGRESS", "COMPLETED"
+    String? priority,      // "URGENT,HIGH" etc.
+    int? page,
+    int? limit,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      final queryParams = <String, String>{};
+      if (dateRange != null && dateRange != "all") {
+        queryParams['date_range'] = dateRange;
+      }
+      if (status != null) queryParams['status'] = status;
+      if (priority != null) queryParams['priority'] = priority;
+      if (page != null) queryParams['page'] = page.toString();
+      if (limit != null) queryParams['limit'] = limit.toString();
+
+      final uri = Uri.parse('$_baseUrl/api/v1/app_task/my-tasks')
+          .replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
+
+
+      print("This is get url getting fetched, ${uri}");
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {'success': true, 'data': data['data'] ?? []};
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to fetch tasks'
+        };
+      }
+    } catch (e) {
+      print("getFilteredTasks error: $e");
+      return {
+        'success': false,
+        'message': 'Network error. Please check your connection.'
+      };
+    }
+  }
+
+
   static Future<Map<String, dynamic>> getTaskDetail(int taskId) async {
   try {
     final prefs = await SharedPreferences.getInstance();

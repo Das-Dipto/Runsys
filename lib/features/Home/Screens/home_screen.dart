@@ -7,6 +7,7 @@ import '../../Task/Screens/today_task_list.dart';
 import '../../Task/screens/all_task_list.dart';
 import '../../Task/screens/tomorrow_task_list.dart';
 import '../../Task/screens/week_task_list.dart';
+import '../../Task/widgets/generic_task_list.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -31,6 +32,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String get _emptyTitle {
     if (_currentTabIndex == 3) {
+      print("This is pressed");
       return "Life's a breeze";
     }
     return "No assigned tasks for ${_tabLabels[_currentTabIndex].toLowerCase()}.";
@@ -242,83 +244,37 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTabBody() {
-    if (_currentTabIndex == 0) return const TodayTaskList();
-    if (_currentTabIndex == 1) return const TomorrowTaskList();
-    if (_currentTabIndex == 2) return const WeekTaskList();
-    if (_currentTabIndex == 3) return const AllTaskList();
 
-    // Empty state (design updated)
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_currentTabIndex == 3)
-              Column(
-                children: [
-                  Text(
-                    _emptyTitle,
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w700,
-                      color: _textPri,
-                      letterSpacing: -0.6,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  Icon(
-                    Icons.emoji_emotions_rounded,
-                    size: 92,
-                    color: _orange.withOpacity(0.85),
-                  ),
-                ],
-              )
-            else
-              Container(
-                width: 180,
-                height: 120,
-                decoration: BoxDecoration(
-                  color: _surfaceAlt,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: _border, width: 1),
-                ),
-                child: const Center(
-                  child: Icon(
-                    Icons.assignment_outlined,
-                    size: 48,
-                    color: _textSec,
-                  ),
-                ),
-              ),
-            const SizedBox(height: 40),
-            Text(
-              _emptyTitle,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-                color: _textPri,
-                height: 1.1,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 12),
-            if (_emptySubtitle != null)
-              Text(
-                _emptySubtitle!,
-                style: TextStyle(
-                  fontSize: 15,
-                  height: 1.5,
-                  color: _textSec,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            const SizedBox(height: 60),
-          ],
-        ),
+  Widget _buildTabBody() {
+    print("Hello from buildTab - Tab changed to: $_currentTabIndex");
+
+    String dateRange;
+    switch (_currentTabIndex) {
+      case 0:
+        dateRange = "today";
+        break;
+      case 1:
+        dateRange = "tomorrow";
+        break;
+      case 2:
+        dateRange = "this_week";
+        break;
+      case 3:
+      default:
+        dateRange = "all";
+        break;
+    }
+
+    // Key is the most important part → forces recreation when tab changes
+    return KeyedSubtree(
+      key: ValueKey(dateRange),        // This forces Flutter to destroy old widget and create new one
+      child: GenericTaskList(
+        dateRange: dateRange,
+        emptyTitle: _emptyTitle,
+        emptySubtitle: _emptySubtitle,
       ),
     );
   }
+
+
 }
