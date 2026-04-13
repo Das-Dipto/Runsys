@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 
-enum SortOption { urgent, high, pending, inProgress }
+enum SortOption {  pending, inProgress }
 
 extension SortOptionLabel on SortOption {
   String get label {
     switch (this) {
-      case SortOption.urgent:      return 'Urgent';
-      case SortOption.high:        return 'High';
       case SortOption.pending:     return 'Pending';
       case SortOption.inProgress:  return 'In Progress';
     }

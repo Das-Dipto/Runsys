@@ -3,18 +3,25 @@
 import 'package:flutter/material.dart';
 import '../../Api/api_controller.dart';
 import '../../Models/task_model.dart';
-import '../Screens/today_task_list.dart';   // Your TaskCard lives here
+
+// Import SortOption from the bottom sheet file
+import '../../Home/Widgets/sort_bottom_sheet.dart';   // ← This is the important import
+
+// Import TaskCard from where it is defined
+import '../Screens/today_task_list.dart';
 
 class GenericTaskList extends StatefulWidget {
   final String dateRange;
   final String emptyTitle;
   final String? emptySubtitle;
+  final SortOption? sortOption;     // Now SortOption is recognized
 
   const GenericTaskList({
     super.key,
     required this.dateRange,
     required this.emptyTitle,
     this.emptySubtitle,
+    this.sortOption,
   });
 
   @override
@@ -28,13 +35,21 @@ class _GenericTaskListState extends State<GenericTaskList> {
 
   @override
   void initState() {
-    print("Loading Tasks from widget- ${widget.dateRange}");
     super.initState();
     _loadTasks();
   }
 
+  @override
+  void didUpdateWidget(covariant GenericTaskList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.dateRange != widget.dateRange || 
+        oldWidget.sortOption != widget.sortOption) {
+      _loadTasks();
+    }
+  }
+
   Future<void> _loadTasks() async {
-    print("🔄 _loadTasks called for dateRange: ${widget.dateRange}");
+    print("🔄 _loadTasks called → dateRange: ${widget.dateRange} | Sort: ${widget.sortOption?.label ?? 'none'}");
 
     setState(() {
       _isLoading = true;
@@ -45,25 +60,23 @@ class _GenericTaskListState extends State<GenericTaskList> {
       dateRange: widget.dateRange == "all" ? null : widget.dateRange,
     );
 
-    if (!mounted) {
-      print("Widget unmounted, skipping state update");
-      return;
-    }
+    if (!mounted) return;
 
     if (result['success'] == true) {
-      print("✅ Loaded ${_tasks.length} tasks for ${widget.dateRange}");
       setState(() {
         _tasks = result['data'] ?? [];
         _isLoading = false;
       });
+      print("✅ Loaded ${_tasks.length} tasks");
     } else {
-      print("❌ Error: ${result['message']}");
       setState(() {
         _error = result['message'];
         _isLoading = false;
       });
+      print("❌ Error: ${_error}");
     }
   }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -164,7 +177,7 @@ class _GenericTaskListState extends State<GenericTaskList> {
       );
     }
 
-    // Show actual tasks using your existing TaskCard
+    // Render TaskCard
     return ListView(
       padding: const EdgeInsets.only(bottom: 32),
       children: _tasks.map((json) {

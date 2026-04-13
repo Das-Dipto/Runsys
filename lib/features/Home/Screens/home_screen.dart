@@ -19,7 +19,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentTabIndex = 0;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  SortOption _currentSort = SortOption.urgent;
+  SortOption _currentSort = SortOption.pending;
   DateTime? _filterStart;
   DateTime? _filterEnd;
 
@@ -243,38 +243,22 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-
   Widget _buildTabBody() {
-    print("Hello from buildTab - Tab changed to: $_currentTabIndex");
-
     String dateRange;
     switch (_currentTabIndex) {
-      case 0:
-        dateRange = "today";
-        break;
-      case 1:
-        dateRange = "tomorrow";
-        break;
-      case 2:
-        dateRange = "this_week";
-        break;
+      case 0:  dateRange = "today";     break;
+      case 1:  dateRange = "tomorrow";  break;
+      case 2:  dateRange = "this_week"; break;
       case 3:
-      default:
-        dateRange = "all";
-        break;
+      default: dateRange = "all";       break;
     }
 
-    // Key is the most important part → forces recreation when tab changes
-    return KeyedSubtree(
-      key: ValueKey(dateRange),        // This forces Flutter to destroy old widget and create new one
-      child: GenericTaskList(
-        dateRange: dateRange,
-        emptyTitle: _emptyTitle,
-        emptySubtitle: _emptySubtitle,
-      ),
+    return GenericTaskList(
+      dateRange: dateRange,
+      emptyTitle: _emptyTitle,
+      emptySubtitle: _emptySubtitle,
+      sortOption: _currentSort,           // ← Passing sort here
     );
   }
-
 
 }
