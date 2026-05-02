@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../Providers/auth_providers.dart';
 import '../../Home/Screens/home_screen.dart';
+import '../../Admin/Screens/admin_dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -181,12 +182,15 @@ class _LoginScreenState extends State<LoginScreen>
     Navigator.of(context).pop();
 
     if (result['success'] == true) {
+      final roleName = authProvider.user?.roleName.toLowerCase().trim() ?? '';
+      final isAdmin = roleName == 'admin';
+
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
           transitionDuration: const Duration(milliseconds: 500),
           pageBuilder: (context, animation, secondaryAnimation) =>
-              const HomeScreen(),
+              isAdmin ? const AdminDashboardScreen() : const HomeScreen(),
           transitionsBuilder: (context, anim, secondaryAnimation, child) =>
               FadeTransition(opacity: anim, child: child),
         ),
@@ -377,7 +381,6 @@ class _LoginScreenState extends State<LoginScreen>
                         Center(
                           child: Column(
                             children: [
-                              // Orange key icon — matches web login
                               Container(
                                 width: 68,
                                 height: 68,
@@ -409,7 +412,6 @@ class _LoginScreenState extends State<LoginScreen>
 
                               const SizedBox(height: 24),
 
-                              // ── "Runsys" — split weight, matches web brand ──
                               RichText(
                                 text: const TextSpan(
                                   children: [
@@ -439,7 +441,6 @@ class _LoginScreenState extends State<LoginScreen>
 
                               const SizedBox(height: 10),
 
-                              // ── Tagline ──
                               const Text(
                                 'Complete property management platform',
                                 textAlign: TextAlign.center,
@@ -499,7 +500,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                               const SizedBox(height: 20),
 
-                              // ── Password label (no forgot here) ──
+                              // ── Password ──
                               const _FieldLabel(text: 'Password'),
                               const SizedBox(height: 8),
                               TextFormField(
@@ -535,7 +536,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                               const SizedBox(height: 16),
 
-                              // ── Remember me (left) | Forgot password (right, replaced 2FA) ──
+                              // ── Remember me | Forgot password ──
                               Row(
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
@@ -569,8 +570,6 @@ class _LoginScreenState extends State<LoginScreen>
                                       ),
                                     ],
                                   ),
-
-                                  // Forgot password — now lives here replacing 2FA
                                   GestureDetector(
                                     onTap: _onForgotPassword,
                                     child: const Text(
@@ -590,7 +589,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                         const SizedBox(height: 20),
 
-                        // ── Sign In CTA button ──
+                        // ── Sign In button ──
                         AnimatedBuilder(
                           animation: _shimmerAnim,
                           builder: (_, __) => SizedBox(
@@ -699,7 +698,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                         const SizedBox(height: 24),
 
-                        // ── Info / credentials notice ──
+                        // ── Credentials notice ──
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 14),
@@ -748,7 +747,7 @@ class _LoginScreenState extends State<LoginScreen>
   }
 }
 
-// ── Field label ──────────────────────────────────────────────────────────────
+// ── Field label ───────────────────────────────────────────────────────────────
 class _FieldLabel extends StatelessWidget {
   final String text;
   const _FieldLabel({required this.text});

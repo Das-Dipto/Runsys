@@ -13,7 +13,7 @@ class DepartmentModel {
 
   factory DepartmentModel.fromJson(Map<String, dynamic> json) {
     return DepartmentModel(
-      id: json['id'],
+      id: json['id'] ?? 0,
       name: json['name'] ?? '',
       description: json['description'] ?? '',
       isActive: json['is_active'] ?? 'N',
@@ -36,7 +36,7 @@ class GroupModel {
 
   factory GroupModel.fromJson(Map<String, dynamic> json) {
     return GroupModel(
-      id: json['id'],
+      id: json['id'] ?? 0,
       name: json['name'] ?? '',
       description: json['description'],
       isActive: json['is_active'] ?? 'N',
@@ -77,7 +77,7 @@ class CompanyModel {
 
   factory CompanyModel.fromJson(Map<String, dynamic> json) {
     return CompanyModel(
-      id: json['id'],
+      id: json['id'] ?? 0,
       name: json['name'] ?? '',
       website: json['website'] ?? '',
       email: json['email'] ?? '',
@@ -99,16 +99,16 @@ class UserModel {
   final String fullName;
   final String email;
   final String mobileNo;
-  final String officePhone;
-  final String employeeId;
+  final String? officePhone;     // Nullable - was causing crash
+  final String? employeeId;      // Nullable
   final int roleId;
   final String roleName;
   final int departmentId;
-  final DepartmentModel department;
-  final int groupId;
-  final GroupModel group;
+  final DepartmentModel? department;   // Nullable (safe)
+  final int? groupId;                  // Nullable
+  final GroupModel? group;             // Nullable
   final int companyId;
-  final CompanyModel company;
+  final CompanyModel? company;         // Nullable (safe)
   final bool twoFactorEnabled;
   final String lastLoginAt;
 
@@ -117,36 +117,42 @@ class UserModel {
     required this.fullName,
     required this.email,
     required this.mobileNo,
-    required this.officePhone,
-    required this.employeeId,
+    this.officePhone,
+    this.employeeId,
     required this.roleId,
     required this.roleName,
     required this.departmentId,
-    required this.department,
-    required this.groupId,
-    required this.group,
+    this.department,
+    this.groupId,
+    this.group,
     required this.companyId,
-    required this.company,
+    this.company,
     required this.twoFactorEnabled,
     required this.lastLoginAt,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
-      id: json['id'],
+      id: json['id'] ?? 0,
       fullName: json['full_name'] ?? '',
       email: json['email'] ?? '',
       mobileNo: json['mobile_no'] ?? '',
-      officePhone: json['office_phone'] ?? '',
-      employeeId: json['employee_id'] ?? '',
-      roleId: json['role_id'],
+      officePhone: json['office_phone'] as String?,
+      employeeId: json['employee_id'] as String?,
+      roleId: json['role_id'] ?? 0,
       roleName: json['role_name'] ?? '',
-      departmentId: json['department_id'],
-      department: DepartmentModel.fromJson(json['department']),
-      groupId: json['group_id'],
-      group: GroupModel.fromJson(json['group']),
-      companyId: json['company_id'],
-      company: CompanyModel.fromJson(json['company']),
+      departmentId: json['department_id'] ?? 0,
+      department: json['department'] != null
+          ? DepartmentModel.fromJson(json['department'] as Map<String, dynamic>)
+          : null,
+      groupId: json['group_id'] as int?,
+      group: json['group'] != null
+          ? GroupModel.fromJson(json['group'] as Map<String, dynamic>)
+          : null,
+      companyId: json['company_id'] ?? 0,
+      company: json['company'] != null
+          ? CompanyModel.fromJson(json['company'] as Map<String, dynamic>)
+          : null,
       twoFactorEnabled: json['two_factor_enabled'] ?? false,
       lastLoginAt: json['last_login_at'] ?? '',
     );

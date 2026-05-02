@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../Authentication/Providers/auth_providers.dart';
 import '../../Profile/Screens/profile_screen.dart';
+import '../../Home/Screens/home_screen.dart';
+import '../../History/Screens/history_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
+
+
 
   @override
   State<AppDrawer> createState() => _AppDrawerState();
@@ -131,13 +135,27 @@ class _AppDrawerState extends State<AppDrawer> {
                 icon: _menuItems[index]['icon'] as IconData,
                 label: _menuItems[index]['label'] as String,
                 isActive: _activeIndex == index,
-                onTap: () {
-                  setState(() => _activeIndex = index);
-                  Future.delayed(
-                    const Duration(milliseconds: 150),
-                    () => Navigator.pop(context),
-                  );
-                },
+onTap: () {
+  setState(() => _activeIndex = index);
+
+  Future.delayed(const Duration(milliseconds: 150), () {
+    Navigator.pop(context);
+
+    if (index == 1) {
+      // My tasks → HomeScreen
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+      );
+    } else if (index == 2) {
+      // My history → HistoryScreen
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const HistoryScreen()),
+      );
+    }
+  });
+},           
               );
             }),
 
@@ -195,7 +213,7 @@ class _AppDrawerState extends State<AppDrawer> {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            user?.department.name ?? '',
+                            user?.department?.name ?? '',
                             style: TextStyle(fontSize: 13, color: _textSec),
                           ),
                         ],

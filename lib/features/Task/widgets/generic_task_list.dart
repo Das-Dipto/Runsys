@@ -183,7 +183,7 @@ class _GenericTaskListState extends State<GenericTaskList> {
       padding: const EdgeInsets.only(bottom: 32),
       children: _tasks.map((json) {
         final task = TaskModel.fromJson(json);
-        return TaskCard(task: task);
+        return TaskCard(task: task, onRefresh: _loadTasks);
       }).toList(),
     );
   }

@@ -82,6 +82,8 @@ class TodayTaskList extends StatelessWidget {
   }
 }
 
+
+
 // ── Priority group header ─────────────────────────────────────────────────────
 
 class _PriorityGroupHeader extends StatelessWidget {
@@ -213,8 +215,8 @@ class TaskCard extends StatelessWidget {
   }
 
   Widget _buildHeader() {
-    final isOverdue = task.status == TaskStatus.overdue;
-    final isNew = task.status == TaskStatus.newTask;
+    final bool isOverdue = task.status == TaskStatus.overdue;
+    final bool isNew = task.status == TaskStatus.newTask;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
@@ -317,6 +319,9 @@ class TaskCard extends StatelessWidget {
       ),
     );
   }
+
+
+
 
   String _todayLabel() {
     final now = DateTime.now();

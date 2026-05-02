@@ -22,9 +22,14 @@ class _TodayTaskListState extends State<TodayTaskList> {
   }
 
   Future<void> _loadTasks() async {
-    setState(() { _isLoading = true; _error = null; });
+    setState(() { 
+      _isLoading = true; 
+      _error = null; 
+    });
+
     final result = await ApiController.getMyTasks();
     if (!mounted) return;
+
     if (result['success'] == true) {
       final List data = result['data'];
       final allTasks = data.map((e) => TaskModel.fromJson(e)).toList();
@@ -143,26 +148,32 @@ class _TodayTaskListState extends State<TodayTaskList> {
     final medium = _tasks.where((t) => t.priority == 'MEDIUM').toList();
     final low    = _tasks.where((t) => t.priority == 'LOW').toList();
 
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 32),
-      children: [
-        if (urgent.isNotEmpty) ...[
-          const _PriorityGroupHeader(label: 'URGENT'),
-          ...urgent.map((t) => TaskCard(task: t)),
+    return WillPopScope(
+      onWillPop: () async {
+        _loadTasks();        // Refresh when user presses system back button
+        return true;
+      },
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: 32),
+        children: [
+          if (urgent.isNotEmpty) ...[
+            const _PriorityGroupHeader(label: 'URGENT'),
+            ...urgent.map((t) => TaskCard(task: t, onRefresh: _loadTasks)),
+          ],
+          if (high.isNotEmpty) ...[
+            const _PriorityGroupHeader(label: 'HIGH'),
+            ...high.map((t) => TaskCard(task: t, onRefresh: _loadTasks)),
+          ],
+          if (medium.isNotEmpty) ...[
+            const _PriorityGroupHeader(label: 'MEDIUM'),
+            ...medium.map((t) => TaskCard(task: t, onRefresh: _loadTasks)),
+          ],
+          if (low.isNotEmpty) ...[
+            const _PriorityGroupHeader(label: 'LOW'),
+            ...low.map((t) => TaskCard(task: t, onRefresh: _loadTasks)),
+          ],
         ],
-        if (high.isNotEmpty) ...[
-          const _PriorityGroupHeader(label: 'HIGH'),
-          ...high.map((t) => TaskCard(task: t)),
-        ],
-        if (medium.isNotEmpty) ...[
-          const _PriorityGroupHeader(label: 'MEDIUM'),
-          ...medium.map((t) => TaskCard(task: t)),
-        ],
-        if (low.isNotEmpty) ...[
-          const _PriorityGroupHeader(label: 'LOW'),
-          ...low.map((t) => TaskCard(task: t)),
-        ],
-      ],
+      ),
     );
   }
 }
@@ -195,7 +206,15 @@ class _PriorityGroupHeader extends StatelessWidget {
 // ── Single task card ──────────────────────────────────────────────────────────
 class TaskCard extends StatefulWidget {
   final TaskModel task;
-  const TaskCard({super.key, required this.task});
+  final VoidCallback? onRefresh;
+  final bool disableNavigation; // ADD
+
+  const TaskCard({
+    super.key, 
+    required this.task,
+    this.onRefresh,
+    this.disableNavigation = false, // ADD
+  });
 
   @override
   State<TaskCard> createState() => _TaskCardState();
@@ -310,10 +329,15 @@ class _TaskCardState extends State<TaskCard> {
     final isOverdue = widget.task.isOverdue;
 
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => TaskDetailScreen(task: widget.task)),
-      ),
+      onTap: widget.disableNavigation ? null : () async {
+      await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => TaskDetailScreen(task: widget.task)),
+        );
+        if (mounted && widget.onRefresh != null) {
+          widget.onRefresh!();
+        }
+      },
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
@@ -454,6 +478,14 @@ class _TaskCardState extends State<TaskCard> {
   }
 
   Widget _buildFooter() {
+    final bool isWorking = widget.task.isTimerActive;
+
+    final String statusText = isWorking 
+        ? 'Working' 
+        : (widget.task.myAssignment.status.isNotEmpty 
+            ? widget.task.myAssignment.status 
+            : 'Pending');
+
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
       child: Row(
@@ -468,28 +500,39 @@ class _TaskCardState extends State<TaskCard> {
             child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 19),
           ),
           const SizedBox(width: 12),
+
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E1E2E),
+              color: isWorking
+                  ? const Color(0xFF43A047).withOpacity(0.18)
+                  : const Color(0xFF1E1E2E),
               borderRadius: BorderRadius.circular(20),
+              border: isWorking
+                  ? Border.all(color: const Color(0xFF43A047).withOpacity(0.6))
+                  : null,
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.person_outline_rounded, size: 15, color: Color(0xFF8A8A9A)),
+                Icon(
+                  isWorking ? Icons.play_circle_outline_rounded : Icons.person_outline_rounded,
+                  size: 15,
+                  color: isWorking ? const Color(0xFF43A047) : const Color(0xFF8A8A9A),
+                ),
                 const SizedBox(width: 6),
                 Text(
-                  widget.task.myAssignment.status,
-                  style: const TextStyle(
-                    fontSize: 12,
+                  statusText,
+                  style: TextStyle(
+                    fontSize: 8,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF8A8A9A),
+                    color: isWorking ? const Color(0xFF43A047) : const Color(0xFF8A8A9A),
                   ),
                 ),
               ],
             ),
           ),
+
           if (widget.task.commentsCount > 0) ...[
             const SizedBox(width: 10),
             Container(

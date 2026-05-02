@@ -38,6 +38,8 @@ class TaskModel {
   final String departmentColor;
   final int commentsCount;
   final MyAssignment myAssignment;
+  final bool isTimerActive;
+
 
   TaskModel({
     required this.id,
@@ -59,6 +61,7 @@ class TaskModel {
     required this.departmentColor,
     required this.commentsCount,
     required this.myAssignment,
+    required this.isTimerActive
   });
 
   factory TaskModel.fromJson(Map<String, dynamic> json) {
@@ -82,6 +85,7 @@ class TaskModel {
       departmentColor: json['department_color'] ?? '#3b82f6',
       commentsCount: json['comments_count'] ?? 0,
       myAssignment: MyAssignment.fromJson(json['my_assignment']),
+      isTimerActive: json['time_tracking']?['is_active'] == true,
     );
   }
 

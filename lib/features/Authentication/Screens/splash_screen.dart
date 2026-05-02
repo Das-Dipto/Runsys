@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'login_screen.dart';
+import '../../Home/Screens/home_screen.dart';
+import '../../Admin/Screens/admin_dashboard.dart';
+
+import 'package:provider/provider.dart';
+import '../Providers/auth_providers.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -68,7 +73,32 @@ class _SplashScreenState extends State<SplashScreen>
       }
     });
 
-    Future.delayed(const Duration(milliseconds: 2800), _navigate);
+    Future.delayed(const Duration(milliseconds: 2800), () async {
+      if (!mounted) return;
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final success = await authProvider.tryAutoLogin();
+      if (!mounted) return;
+
+      if (success) {
+        // ── Role-based routing on auto login ──
+        final roleName =
+            authProvider.user?.roleName.toLowerCase().trim() ?? '';
+        final isAdmin = roleName == 'admin';
+
+        Navigator.pushReplacement(
+          context,
+          PageRouteBuilder(
+            transitionDuration: const Duration(milliseconds: 500),
+            pageBuilder: (_, __, ___) =>
+                isAdmin ? const AdminDashboardScreen() : const HomeScreen(),
+            transitionsBuilder: (_, anim, __, child) =>
+                FadeTransition(opacity: anim, child: child),
+          ),
+        );
+      } else {
+        _navigate(); // goes to LoginScreen
+      }
+    });
   }
 
   void _navigate() {
@@ -99,16 +129,16 @@ class _SplashScreenState extends State<SplashScreen>
     final size = MediaQuery.of(context).size;
 
     // ── Web-consistent palette ──
-    const bgColor      = Color(0xFF0A0A0F);
-    const orange       = Color(0xFFFF7300);
-    const orangeAlt    = Color(0xFFFF8C00);
-    const surfaceCard  = Color(0xFF111118);
+    const bgColor     = Color(0xFF0A0A0F);
+    const orange      = Color(0xFFFF7300);
+    const orangeAlt   = Color(0xFFFF8C00);
+    const surfaceCard = Color(0xFF111118);
 
     return Scaffold(
       backgroundColor: bgColor,
       body: Stack(
         children: [
-          // ── Ambient radial glow — top center (matches web bg) ──
+          // ── Ambient radial glow — top center ──
           Positioned(
             top: -size.height * 0.18,
             left: size.width * 0.05,
@@ -116,9 +146,12 @@ class _SplashScreenState extends State<SplashScreen>
             child: AnimatedBuilder(
               animation: _loadingController,
               builder: (_, __) {
-                // Pulse glow gently using loading controller
-                final pulse = (0.7 + 0.3 *
-                    (0.5 - 0.5 * (2 * 3.14159 * _loadingController.value).cos()));
+                final pulse = (0.7 +
+                    0.3 *
+                        (0.5 -
+                            0.5 *
+                                (2 * 3.14159 * _loadingController.value)
+                                    .cos()));
                 return Container(
                   height: size.height * 0.55,
                   decoration: BoxDecoration(
@@ -173,7 +206,7 @@ class _SplashScreenState extends State<SplashScreen>
                     scale: _logoScale,
                     child: Column(
                       children: [
-                        // ── Logo container — orange icon on dark card ──
+                        // ── Logo container ──
                         Container(
                           width: 110,
                           height: 110,
@@ -203,7 +236,8 @@ class _SplashScreenState extends State<SplashScreen>
                               width: 58,
                               height: 58,
                               child: CustomPaint(
-                                painter: _ModernLogoMark(orange, orangeAlt, surfaceCard),
+                                painter: _ModernLogoMark(
+                                    orange, orangeAlt, surfaceCard),
                               ),
                             ),
                           ),
@@ -211,7 +245,7 @@ class _SplashScreenState extends State<SplashScreen>
 
                         const SizedBox(height: 28),
 
-                        // ── Runsys split-weight wordmark ──
+                        // ── Runsys wordmark ──
                         RichText(
                           text: const TextSpan(
                             children: [
@@ -311,8 +345,8 @@ class _SplashScreenState extends State<SplashScreen>
               opacity: _taglineFade,
               child: Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 5),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                   decoration: BoxDecoration(
                     border: Border.all(
                       color: orange.withOpacity(0.20),
@@ -361,14 +395,12 @@ class _ShimmerBarLoader extends StatelessWidget {
             borderRadius: BorderRadius.circular(2),
             child: Stack(
               children: [
-                // Track
                 Container(
                   decoration: BoxDecoration(
                     color: accentColor.withOpacity(0.10),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-                // Shimmer head
                 FractionallySizedBox(
                   widthFactor: 0.38,
                   child: Transform.translate(
@@ -417,7 +449,6 @@ class _DotGridPainter extends CustomPainter {
       }
     }
 
-    // Corner accent lines — top left
     final linePaint = Paint()
       ..color = orange.withOpacity(0.04)
       ..style = PaintingStyle.stroke
@@ -432,7 +463,6 @@ class _DotGridPainter extends CustomPainter {
       );
     }
 
-    // Corner accent lines — bottom right
     for (int i = 0; i < 5; i++) {
       final offset = i * 22.0;
       canvas.drawLine(
@@ -442,7 +472,6 @@ class _DotGridPainter extends CustomPainter {
       );
     }
 
-    // Faint circles — top right
     final circlePaint = Paint()
       ..color = orange.withOpacity(0.04)
       ..style = PaintingStyle.stroke
@@ -487,7 +516,6 @@ class _ModernLogoMark extends CustomPainter {
 
     final barW = w * 0.14;
 
-    // Left vertical bar
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(w * 0.08, h * 0.08, barW, h * 0.84),
@@ -496,7 +524,6 @@ class _ModernLogoMark extends CustomPainter {
       solidPaint,
     );
 
-    // Top bump of R
     final bumpPath = Path()
       ..moveTo(w * 0.08 + barW, h * 0.08)
       ..lineTo(w * 0.72, h * 0.08)
@@ -506,7 +533,6 @@ class _ModernLogoMark extends CustomPainter {
       ..close();
     canvas.drawPath(bumpPath, lightPaint);
 
-    // Diagonal leg
     final legPath = Path()
       ..moveTo(w * 0.22 + barW * 0.3, h * 0.50)
       ..lineTo(w * 0.92, h * 0.92)
@@ -515,10 +541,10 @@ class _ModernLogoMark extends CustomPainter {
       ..close();
     canvas.drawPath(legPath, solidPaint);
 
-    // Inner cutout
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(w * 0.22 + barW * 0.3, h * 0.18, w * 0.44, h * 0.22),
+        Rect.fromLTWH(
+            w * 0.22 + barW * 0.3, h * 0.18, w * 0.44, h * 0.22),
         const Radius.circular(3),
       ),
       Paint()
@@ -526,7 +552,6 @@ class _ModernLogoMark extends CustomPainter {
         ..style = PaintingStyle.fill,
     );
 
-    // Accent dot
     canvas.drawCircle(Offset(w * 0.82, h * 0.78), 4, solidPaint);
     canvas.drawCircle(Offset(w * 0.82, h * 0.78), 7, strokePaint);
   }
@@ -536,5 +561,9 @@ class _ModernLogoMark extends CustomPainter {
 }
 
 extension on double {
-  double cos() => 1 - 2 * (this % (2 * 3.14159) / (2 * 3.14159) - 0.5).abs() * 2;
+  double cos() =>
+      1 -
+      2 *
+          (this % (2 * 3.14159) / (2 * 3.14159) - 0.5).abs() *
+          2;
 }

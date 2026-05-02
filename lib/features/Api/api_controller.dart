@@ -38,7 +38,7 @@ class ApiController {
         print("This is api body- ${email}, ${password}, ${rememberMe}");
     try {
       final deviceData = await _getDeviceInfo();
-      final url = Uri.parse('$_baseUrl/api/v1/auth/user_login');
+      final url = Uri.parse('$_baseUrl/api/v1/app_auth/user_login');
 
       final response = await http.post(
         url,
@@ -65,6 +65,7 @@ class ApiController {
         };
       }
     } catch (e) {
+      print("The following error appearsd while login $e");
       return {
         'success': false,
         'message': 'Network error. Please check your connection.',
@@ -179,6 +180,32 @@ class ApiController {
       };
     }
   }
+
+  static Future<Map<String, dynamic>> getCompletedTasks() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    final url = Uri.parse('$_baseUrl/api/v1/app_task/my-tasks?status=COMPLETED');
+    final response = await http.get(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {'success': true, 'data': data['data']};
+    } else {
+      return {'success': false, 'message': data['message'] ?? 'Failed to fetch completed tasks'};
+    }
+  } catch (e) {
+    return {'success': false, 'message': 'Network error. Please check your connection.'};
+  }
+}
+
   static Future<Map<String, dynamic>> getTaskDetail(int taskId) async {
   try {
     final prefs = await SharedPreferences.getInstance();
@@ -224,6 +251,44 @@ static Future<Map<String, dynamic>> getProfile() async {
       return {'success': true, 'data': data['user']};
     } else {
       return {'success': false, 'message': data['message'] ?? 'Failed to fetch profile'};
+    }
+  } catch (e) {
+    return {'success': false, 'message': 'Network error. Please check your connection.'};
+  }
+}
+
+static Future<Map<String, dynamic>> updateProfile({
+  required String fullName,
+  String? mobileNo,
+  String? officePhone,
+  String? notes,
+}) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    final url = Uri.parse('$_baseUrl/api/v1/app_auth/profile');
+    final response = await http.put(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'full_name': fullName,
+        if (mobileNo != null) 'mobile_no': mobileNo,
+        if (officePhone != null) 'office_phone': officePhone,
+        if (notes != null) 'notes': notes,
+      }),
+    );
+
+    final data = jsonDecode(response.body);
+    print('updateProfile response- $data');
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {'success': true, 'data': data};
+    } else {
+      return {'success': false, 'message': data['message'] ?? 'Failed to update profile'};
     }
   } catch (e) {
     return {'success': false, 'message': 'Network error. Please check your connection.'};
@@ -335,7 +400,8 @@ static Future<Map<String, dynamic>> getProfile() async {
     final data = jsonDecode(response.body);
     print("startTimeLog response- $data  and TaskId- $taskId");
 
-    if (response.statusCode == 200 && data['success'] == true) {
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      print("This is startTimeLogData- ${data}");
       return {'success': true, 'data': data['data']};
     } else {
       return {'success': false, 'message': data['message'] ?? 'Failed to start timer'};
@@ -344,6 +410,40 @@ static Future<Map<String, dynamic>> getProfile() async {
     return {'success': false, 'message': 'Network error. Please check your connection.'};
   }
 }
+
+static Future<Map<String, dynamic>> logout() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+    final deviceData = await _getDeviceInfo();
+
+    final url = Uri.parse('$_baseUrl/api/v1/app_auth/logout');
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'device_id': deviceData['device_id'],
+      }),
+    );
+
+    final data = jsonDecode(response.body);
+    print('logout response- $data');
+
+    if (response.statusCode == 200) {
+      return {'success': true};
+    } else {
+      return {'success': false, 'message': data['message'] ?? 'Logout failed'};
+    }
+  } catch (e) {
+    return {'success': false, 'message': 'Network error. Please check your connection.'};
+  }
+}
+
+
+
 
 static Future<Map<String, dynamic>> stopTimeLog(int logId) async {
   try {
@@ -371,5 +471,46 @@ static Future<Map<String, dynamic>> stopTimeLog(int logId) async {
     return {'success': false, 'message': 'Network error. Please check your connection.'};
   }
 }
+
+static Future<Map<String, dynamic>> submitTask({
+  required int taskId,
+  required List<Map<String, dynamic>> responses,
+  required int timeLogId,
+  String remarks = '',
+  String comment = '',
+}) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    final url = Uri.parse('$_baseUrl/api/v1/app_task/tasks/$taskId/submit');
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'responses': responses,
+        'remarks': remarks,
+        'time_log_id': timeLogId,
+        'comment': comment,
+      }),
+    );
+
+    final data = jsonDecode(response.body);
+    print('submitTask response- $data');
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {'success': true, 'data': data};
+    } else {
+      return {'success': false, 'message': data['message'] ?? 'Failed to submit task'};
+    }
+  } catch (e) {
+    return {'success': false, 'message': 'Network error. Please check your connection.'};
+  }
+}
+
+
 
 }
