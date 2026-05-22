@@ -1,14 +1,19 @@
+import 'package:Runsys/features/Admin/Dashboard/Screens/admin_dashboard.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../Authentication/Providers/auth_providers.dart';
-import '../../Authentication/Screens/login_screen.dart';
+import '../../../Authentication/Providers/auth_providers.dart';
+import '../../../Authentication/Screens/login_screen.dart';
+import '../../Assigned_Tasks/Screens/assigned_tasks_screen.dart';
+import '../../Properties/Screens/properties_screen.dart';
+import '../../Settings/Screens/settings_screen.dart';
 
 class AdminDrawer extends StatelessWidget {
-  const AdminDrawer({super.key});
+  /// Pass the label of the currently active screen, e.g. 'Tasks', 'Properties'
+  final String activeMenu;
 
-  // ── Palette (matches app-wide theme) ──
+  const AdminDrawer({super.key, this.activeMenu = 'Properties'});
+
   static const Color _bg        = Color(0xFF0D0D14);
-  static const Color _surface   = Color(0xFF111118);
   static const Color _orange    = Color(0xFFFF7300);
   static const Color _orangeDim = Color(0x22FF7300);
   static const Color _textPri   = Color(0xFFFFFFFF);
@@ -30,14 +35,11 @@ class AdminDrawer extends StatelessWidget {
             Container(
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
               decoration: const BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: _border, width: 1),
-                ),
+                border: Border(bottom: BorderSide(color: _border, width: 1)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Logo wordmark
                   RichText(
                     text: const TextSpan(
                       children: [
@@ -62,10 +64,7 @@ class AdminDrawer extends StatelessWidget {
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 16),
-
-                  // User avatar + name + role
                   Row(
                     children: [
                       Container(
@@ -75,9 +74,7 @@ class AdminDrawer extends StatelessWidget {
                           color: _orangeDim,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: _orange.withOpacity(0.35),
-                            width: 1,
-                          ),
+                              color: _orange.withOpacity(0.35), width: 1),
                         ),
                         child: Center(
                           child: Text(
@@ -138,7 +135,6 @@ class AdminDrawer extends StatelessWidget {
 
             const SizedBox(height: 12),
 
-            // ── Menu label ──
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
               child: Text(
@@ -152,16 +148,63 @@ class AdminDrawer extends StatelessWidget {
               ),
             ),
 
-            // ── Tasks menu item ──
+            _DrawerMenuItem(
+              icon: Icons.domain_rounded,
+              label: 'Properties',
+              isActive: activeMenu == 'Properties',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const PropertiesScreen()),
+                );
+              },
+            ),
+
             _DrawerMenuItem(
               icon: Icons.task_alt_rounded,
               label: 'Tasks',
-              isActive: true,
-              onTap: () {
+              isActive: activeMenu == 'Tasks',
+               onTap: () {
                 Navigator.pop(context);
-                // TODO: navigate to Tasks screen when ready
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const AdminDashboardScreen()),
+                );
               },
             ),
+
+            _DrawerMenuItem(
+              icon: Icons.date_range_rounded,
+              label: 'Assigned Tasks',
+              isActive: activeMenu == 'Assigned Tasks',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const AssignedTasksScreen()),
+                );
+              },
+            ),
+
+
+
+            // _DrawerMenuItem(
+            //   icon: Icons.settings_rounded,
+            //   label: 'Settings',
+            //   isActive: activeMenu == 'Settings',
+            //   onTap: () {
+            //     Navigator.pop(context);
+            //     Navigator.push(
+            //       context,
+            //       MaterialPageRoute(
+            //           builder: (_) => const SettingsScreen()),
+            //     );
+            //   },
+            // ),
 
             const Spacer(),
 
@@ -182,8 +225,7 @@ class AdminDrawer extends StatelessWidget {
                     Navigator.pushAndRemoveUntil(
                       context,
                       PageRouteBuilder(
-                        transitionDuration:
-                            const Duration(milliseconds: 500),
+                        transitionDuration: const Duration(milliseconds: 500),
                         pageBuilder: (_, __, ___) => const LoginScreen(),
                         transitionsBuilder: (_, anim, __, child) =>
                             FadeTransition(opacity: anim, child: child),
@@ -195,7 +237,6 @@ class AdminDrawer extends StatelessWidget {
               ),
             ),
 
-            // ── Version ──
             Padding(
               padding: const EdgeInsets.only(bottom: 20),
               child: Center(
@@ -236,7 +277,6 @@ class _DrawerMenuItem extends StatelessWidget {
   static const Color _orangeDim = Color(0x22FF7300);
   static const Color _textPri   = Color(0xFFFFFFFF);
   static const Color _textSec   = Color(0xFF8A8A9A);
-  static const Color _border    = Color(0xFF1E1E2E);
 
   @override
   Widget build(BuildContext context) {
@@ -257,12 +297,15 @@ class _DrawerMenuItem extends StatelessWidget {
           splashColor: _orange.withOpacity(0.08),
           highlightColor: _orange.withOpacity(0.05),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             decoration: BoxDecoration(
               color: isActive ? _orangeDim : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isActive ? _orange.withOpacity(0.25) : Colors.transparent,
+                color: isActive
+                    ? _orange.withOpacity(0.25)
+                    : Colors.transparent,
                 width: 1,
               ),
             ),

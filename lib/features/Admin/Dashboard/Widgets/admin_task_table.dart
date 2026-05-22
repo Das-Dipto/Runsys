@@ -1,7 +1,9 @@
 // admin_task_table.dart
 import 'package:flutter/material.dart';
+import '../../../Api/api_controller.dart'; 
+import './task_detail_dialog.dart';  
 
-class _TaskRow {
+class TaskRow {
   final String task;
   final String property;
   final String propertyAddress;
@@ -25,7 +27,7 @@ class _TaskRow {
   final String completedBy;
   final String dateUpdated;
 
-  const _TaskRow({
+  const TaskRow({
     required this.task,
     required this.property,
     required this.propertyAddress,
@@ -50,129 +52,6 @@ class _TaskRow {
     required this.dateUpdated,
   });
 }
-
-final List<_TaskRow> dummyTasks = [
-  const _TaskRow(
-    task: 'Demo template',
-    property: 'Default Property',
-    propertyAddress: '',
-    department: 'Cleaning',
-    subdepartment: 'test',
-    assignments: ['Bashir Ahmed'],
-    dueDate: 'Due: Sun Apr 5',
-    dueDateLabel: 'Sun Apr 5',
-    dueDateRed: true,
-    issues: 0,
-    comments: 0,
-    status: 'PENDING',
-    priority: 'High',
-    cost: '\$120',
-    billTo: 'Client A',
-    requestedBy: 'Admin',
-    tags: 'urgent',
-    createdDate: 'Apr 1',
-    createdBy: 'John',
-    dateCompleted: '-',
-    completedBy: '-',
-    dateUpdated: 'Apr 2',
-  ),
-  const _TaskRow(
-    task: 'urjent clean',
-    property: 'demo properties',
-    propertyAddress: 'Dhaka, mohammadpur',
-    department: 'Cleaning',
-    subdepartment: 'test',
-    assignments: ['Bashir Ahmed', 'Bashir Ahmed'],
-    dueDate: 'Due: Sun Apr 5',
-    dueDateLabel: 'Sun Apr 5',
-    dueDateRed: true,
-    issues: 0,
-    comments: 0,
-    status: 'PENDING',
-    priority: 'Medium',
-    cost: '\$80',
-    billTo: 'Client B',
-    requestedBy: 'Manager',
-    tags: 'clean',
-    createdDate: 'Apr 1',
-    createdBy: 'Sara',
-    dateCompleted: '-',
-    completedBy: '-',
-    dateUpdated: 'Apr 3',
-  ),
-  const _TaskRow(
-    task: 'Check Out Maintenance Inspection',
-    property: '32 Silbury',
-    propertyAddress: '897 Silbury Boulevard Milton Keynes',
-    department: 'Cleaning',
-    subdepartment: 'test',
-    assignments: ['Bashir ahmed', 'Rayhan ahmed'],
-    dueDate: 'Due: Mon Apr 6',
-    dueDateLabel: 'Mon Apr 6',
-    dueDateRed: true,
-    issues: 1,
-    comments: 1,
-    status: 'PENDING',
-    priority: 'High',
-    cost: '\$200',
-    billTo: 'Client C',
-    requestedBy: 'Admin',
-    tags: 'inspection',
-    createdDate: 'Apr 2',
-    createdBy: 'John',
-    dateCompleted: '-',
-    completedBy: '-',
-    dateUpdated: 'Apr 4',
-  ),
-  const _TaskRow(
-    task: 'Deep Clean Common Areas',
-    property: 'Skyline Tower',
-    propertyAddress: '45 High Street, Manchester',
-    department: 'Cleaning',
-    subdepartment: 'Common Areas',
-    assignments: ['Sarah Johnson'],
-    dueDate: 'Due: Wed Apr 8',
-    dueDateLabel: 'Wed Apr 8',
-    dueDateRed: false,
-    issues: 0,
-    comments: 2,
-    status: 'IN PROGRESS',
-    priority: 'Low',
-    cost: '\$150',
-    billTo: 'Client D',
-    requestedBy: 'Supervisor',
-    tags: 'deep-clean',
-    createdDate: 'Apr 3',
-    createdBy: 'Mike',
-    dateCompleted: '-',
-    completedBy: '-',
-    dateUpdated: 'Apr 5',
-  ),
-  const _TaskRow(
-    task: 'Plumbing Repair — Unit 4B',
-    property: 'Riverside Court',
-    propertyAddress: '12 River Rd, Birmingham',
-    department: 'Maintenance',
-    subdepartment: 'Plumbing',
-    assignments: ['Mike Torres'],
-    dueDate: 'Due: Thu Apr 9',
-    dueDateLabel: 'Thu Apr 9',
-    dueDateRed: false,
-    issues: 2,
-    comments: 3,
-    status: 'PENDING',
-    priority: 'High',
-    cost: '\$350',
-    billTo: 'Client E',
-    requestedBy: 'Tenant',
-    tags: 'plumbing',
-    createdDate: 'Apr 4',
-    createdBy: 'Admin',
-    dateCompleted: '-',
-    completedBy: '-',
-    dateUpdated: 'Apr 6',
-  ),
-];
 
 // ── Fixed column widths ───────────────────────────────────────────────────────
 const List<double> _colWidths = [
@@ -217,6 +96,81 @@ class AdminTaskTable extends StatefulWidget {
 class _AdminTaskTableState extends State<AdminTaskTable> {
   final ScrollController _hScroll = ScrollController();
 
+  bool _isLoading = true;
+  String? _errorMessage;
+  List<TaskRow> _tasks = [];   // ← Fixed
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchTasks();
+  }
+
+  Future<void> _fetchTasks() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final result = await ApiController.getAllTasks();
+
+    if (result['success'] == true) {
+      final List<dynamic> apiData = result['data'];
+
+      final List<TaskRow> mappedTasks = apiData.map((item) {
+        final dueDateTime = item['due_date'] != null 
+            ? DateTime.parse(item['due_date']).toLocal() 
+            : null;
+
+        return TaskRow(   // ← Fixed
+          task: item['title'] ?? 'Untitled Task',
+          property: item['property_name'] ?? '',
+          propertyAddress: item['property_address'] ?? '',
+          department: item['department_name'] ?? '',
+          subdepartment: item['subdepartment_name'] ?? '',
+          assignments: item['assignee_details'] != null
+              ? (item['assignee_details'] as List)
+                  .map<String>((a) => a['full_name']?.toString() ?? '')
+                  .where((name) => name.isNotEmpty)
+                  .toList()
+              : [],
+          dueDate: dueDateTime != null ? 'Due: ${dueDateTime.toString().split(' ')[0]}' : 'No Due',
+          dueDateLabel: dueDateTime != null ? dueDateTime.toString().split(' ')[0] : '',
+          dueDateRed: dueDateTime != null && dueDateTime.isBefore(DateTime.now()),
+          issues: 0,
+          comments: item['comments_count'] ?? 0,
+          status: (item['status']?.toString() ?? 'PENDING').toUpperCase(),
+          priority: (item['priority']?.toString() ?? 'MEDIUM').toUpperCase(),
+          cost: '\$0',
+          billTo: '',
+          requestedBy: item['requested_by'] ?? item['created_by_name'] ?? '',
+          tags: item['tags'] != null && (item['tags'] as List).isNotEmpty
+              ? (item['tags'] as List).join(', ')
+              : '',
+          createdDate: item['created_at'] != null
+              ? DateTime.parse(item['created_at']).toLocal().toString().split(' ')[0]
+              : '',
+          createdBy: item['created_by_name'] ?? '',
+          dateCompleted: item['status'] == 'COMPLETED' ? 'Completed' : '-',
+          completedBy: '',
+          dateUpdated: item['updated_at'] != null
+              ? DateTime.parse(item['updated_at']).toLocal().toString().split(' ')[0]
+              : '',
+        );
+      }).toList();
+
+      setState(() {
+        _tasks = mappedTasks;
+        _isLoading = false;
+      });
+    } else {
+      setState(() {
+        _errorMessage = result['message'] ?? 'Failed to load tasks';
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   void dispose() {
     _hScroll.dispose();
@@ -225,12 +179,27 @@ class _AdminTaskTableState extends State<AdminTaskTable> {
 
   @override
   Widget build(BuildContext context) {
-    // ── Strategy: ONE horizontal SingleChildScrollView wraps a Column
-    // that has the header + all rows. The parent (Expanded in dashboard)
-    // gives bounded height, so we use a vertical ListView OUTSIDE this
-    // widget. But since AdminTaskTable itself is inside Expanded, we use
-    // a Column with a fixed-height header + Expanded ListView for rows,
-    // all wrapped in one horizontal scroll.
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _fetchTasks, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
+
+    if (_tasks.isEmpty) {
+      return const Center(child: Text('No tasks available'));
+    }
+
     return Scrollbar(
       controller: _hScroll,
       thumbVisibility: true,
@@ -242,16 +211,12 @@ class _AdminTaskTableState extends State<AdminTaskTable> {
           width: _tableWidth,
           child: Column(
             children: [
-              // ── Sticky header ──
               _buildHeader(),
-
-              // ── Scrollable rows ──
               Expanded(
                 child: ListView.builder(
                   padding: EdgeInsets.zero,
-                  itemCount: dummyTasks.length,
-                  itemBuilder: (context, index) =>
-                      _buildRow(dummyTasks[index], index),
+                  itemCount: _tasks.length,
+                  itemBuilder: (context, index) => _buildRow(_tasks[index], index),
                 ),
               ),
             ],
@@ -292,14 +257,12 @@ class _AdminTaskTableState extends State<AdminTaskTable> {
   }
 
   // ── Row ───────────────────────────────────────────────────────────────────────
-  Widget _buildRow(_TaskRow task, int index) {
+  Widget _buildRow(TaskRow task, int index) {   // ← Fixed
     final isEven = index % 2 == 0;
     const grey12 = TextStyle(color: Color(0xFF8A8A9A), fontSize: 12);
-    const white12 = TextStyle(
-        color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500);
+    const white12 = TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500);
 
-    Widget cell(int i, Widget child) =>
-        SizedBox(width: _colWidths[i], child: child);
+    Widget cell(int i, Widget child) => SizedBox(width: _colWidths[i], child: child);
 
     Widget txt(String s, {TextStyle style = grey12}) => Text(
           s,
@@ -308,71 +271,68 @@ class _AdminTaskTableState extends State<AdminTaskTable> {
           maxLines: 1,
         );
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: isEven
-            ? const Color(0xFF0A0A0F)
-            : const Color(0xFF16161F).withOpacity(0.6),
-        border: const Border(
-            bottom: BorderSide(color: Color(0xFF1E1E2E), width: 0.5)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 0 TASK
-          cell(0, _taskCell(task)),
-          // 1 PROPERTY
-          cell(1, _propertyCell(task)),
-          // 2 DEPT
-          cell(2, txt(task.department, style: white12)),
-          // 3 SUB DEPT
-          cell(3, txt(task.subdepartment)),
-          // 4 ASSIGNMENT
-          cell(4, _assignmentCell(task)),
-          // 5 DUE DATE
-          cell(5, _dueDateCell(task)),
-          // 6 ISSUES
-          cell(6, txt('${task.issues} issues')),
-          // 7 COMMENTS
-          cell(7, txt('${task.comments}')),
-          // 8 STATUS
-          cell(8, _statusBadge(task.status)),
-          // 9 PRIORITY
-          cell(9, txt(task.priority)),
-          // 10 COST
-          cell(10, txt(task.cost)),
-          // 11 BILL TO
-          cell(11, txt(task.billTo)),
-          // 12 REQUESTED BY
-          cell(12, txt(task.requestedBy)),
-          // 13 TAGS
-          cell(13, txt(task.tags)),
-          // 14 CREATED
-          cell(14, txt(task.createdDate)),
-          // 15 CREATED BY
-          cell(15, txt(task.createdBy)),
-          // 16 COMPLETED
-          cell(16, txt(task.dateCompleted)),
-          // 17 COMP BY
-          cell(17, txt(task.completedBy)),
-          // 18 UPDATED
-          cell(18, txt(task.dateUpdated)),
-        ],
+    return GestureDetector(
+onTap: () {
+  showDialog(
+    context: context,
+    builder: (context) => TaskDetailDialog(
+      title: task.task,
+      property: task.property,
+      propertyAddress: task.propertyAddress,
+      department: task.department,
+      subDepartment: task.subdepartment,
+      assignees: task.assignments,
+      dueDateLabel: task.dueDateLabel,
+      status: task.status,
+      priority: task.priority,
+      createdBy: task.createdBy,
+      createdDate: task.createdDate,
+      updatedDate: task.dateUpdated,
+      comments: task.comments,
+    ),
+  );
+},
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isEven ? const Color(0xFF0A0A0F) : const Color(0xFF16161F).withOpacity(0.6),
+          border: const Border(bottom: BorderSide(color: Color(0xFF1E1E2E), width: 0.5)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            cell(0, _taskCell(task)),
+            cell(1, _propertyCell(task)),
+            cell(2, txt(task.department, style: white12)),
+            cell(3, txt(task.subdepartment)),
+            cell(4, _assignmentCell(task)),
+            cell(5, _dueDateCell(task)),
+            cell(6, txt('${task.issues} issues')),
+            cell(7, txt('${task.comments}')),
+            cell(8, _statusBadge(task.status)),
+            cell(9, txt(task.priority)),
+            cell(10, txt(task.cost)),
+            cell(11, txt(task.billTo)),
+            cell(12, txt(task.requestedBy)),
+            cell(13, txt(task.tags)),
+            cell(14, txt(task.createdDate)),
+            cell(15, txt(task.createdBy)),
+            cell(16, txt(task.dateCompleted)),
+            cell(17, txt(task.completedBy)),
+            cell(18, txt(task.dateUpdated)),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _taskCell(_TaskRow t) => Column(
+  Widget _taskCell(TaskRow t) => Column(   // ← Fixed
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             t.task,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w600),
+            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -386,45 +346,40 @@ class _AdminTaskTableState extends State<AdminTaskTable> {
         ],
       );
 
-  Widget _propertyCell(_TaskRow t) => Column(
+  Widget _propertyCell(TaskRow t) => Column(   // ← Fixed
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
             t.property,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w500),
+            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
           if (t.propertyAddress.isNotEmpty)
             Text(
               t.propertyAddress,
-              style:
-                  const TextStyle(color: Color(0xFF8A8A9A), fontSize: 11),
+              style: const TextStyle(color: Color(0xFF8A8A9A), fontSize: 11),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
         ],
       );
 
-  Widget _assignmentCell(_TaskRow t) => Column(
+  Widget _assignmentCell(TaskRow t) => Column(   // ← Fixed
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: t.assignments
             .map((a) => Text(
                   a,
-                  style: const TextStyle(
-                      color: Color(0xFF8A8A9A), fontSize: 11),
+                  style: const TextStyle(color: Color(0xFF8A8A9A), fontSize: 11),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ))
             .toList(),
       );
 
-  Widget _dueDateCell(_TaskRow t) => Row(
+  Widget _dueDateCell(TaskRow t) => Row(   // ← Fixed
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
@@ -437,8 +392,7 @@ class _AdminTaskTableState extends State<AdminTaskTable> {
             child: Text(
               t.dueDateLabel,
               style: TextStyle(
-                color:
-                    t.dueDateRed ? Colors.red : const Color(0xFF8A8A9A),
+                color: t.dueDateRed ? Colors.red : const Color(0xFF8A8A9A),
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
               ),
@@ -463,8 +417,7 @@ class _AdminTaskTableState extends State<AdminTaskTable> {
       ),
       child: Text(
         status,
-        style: TextStyle(
-            color: color, fontSize: 10, fontWeight: FontWeight.w700),
+        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700),
         overflow: TextOverflow.ellipsis,
         maxLines: 1,
       ),

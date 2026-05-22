@@ -7,7 +7,7 @@ import '../Home/Widgets/sort_bottom_sheet.dart';
 import '../Home/Widgets/filter_bottom_sheet.dart';
 
 class ApiController {
-  static const String _baseUrl = 'http://159.65.156.164:5000';
+  static const String _baseUrl = 'https://runsysapi.runsys.app';
 
   static Future<Map<String, String>> _getDeviceInfo() async {
     final deviceInfo = DeviceInfoPlugin();
@@ -507,6 +507,217 @@ static Future<Map<String, dynamic>> submitTask({
       return {'success': false, 'message': data['message'] ?? 'Failed to submit task'};
     }
   } catch (e) {
+    return {'success': false, 'message': 'Network error. Please check your connection.'};
+  }
+}
+
+static Future<Map<String, dynamic>> getAllTasks() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    final url = Uri.parse('$_baseUrl/api/v1/tasks?limit=5');
+
+    final response = await http.get(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {
+        'success': true,
+        'data': data['data'] ?? [],
+        'meta': data['meta']
+      };
+    } else {
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Failed to fetch tasks'
+      };
+    }
+  } catch (e) {
+    print("getAllTasks error: $e");
+    return {
+      'success': false,
+      'message': 'Network error. Please check your connection.'
+    };
+  }
+}
+
+static Future<Map<String, dynamic>> getActiveProperties() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    final url = Uri.parse('$_baseUrl/api/v1/properties/active');
+
+    final response = await http.get(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {
+        'success': true,
+        'data': data['data'] ?? [],
+      };
+    } else {
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Failed to fetch properties'
+      };
+    }
+  } catch (e) {
+    print("getActiveProperties error: $e");
+    return {
+      'success': false,
+      'message': 'Network error. Please check your connection.'
+    };
+  }
+}
+
+// ── Add these functions to your ApiController class ──────────────────────────
+
+static Future<Map<String, dynamic>> getTaskDepartments() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+    final companyId = prefs.getInt('company_id') ?? 8;
+
+    final url = Uri.parse('$_baseUrl/api/v1/properties/task_temp_departments?companyId=$companyId');
+
+    final response = await http.get(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {
+        'success': true,
+        'data': data['data']['data'] ?? [],
+      };
+    } else {
+      return {'success': false, 'message': data['message'] ?? 'Failed to fetch departments'};
+    }
+  } catch (e) {
+    print("getTaskDepartments error: $e");
+    return {'success': false, 'message': 'Network error.'};
+  }
+}
+
+static Future<Map<String, dynamic>> getTaskTags() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+    final companyId = prefs.getInt('company_id') ?? 8;
+
+    final url = Uri.parse('$_baseUrl/api/v1/task_tag_setting/company/$companyId');
+
+    final response = await http.get(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {
+        'success': true,
+        'data': data['data'] ?? [],
+      };
+    } else {
+      return {'success': false, 'message': data['message'] ?? 'Failed to fetch tags'};
+    }
+  } catch (e) {
+    print("getTaskTags error: $e");
+    return {'success': false, 'message': 'Network error.'};
+  }
+}
+
+static Future<Map<String, dynamic>> getAssignableUsers({int? departmentId}) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+    final companyId = prefs.getInt('company_id') ?? 8;
+
+    String urlStr = '$_baseUrl/api/v1/users/asign_task?companyId=$companyId';
+    if (departmentId != null) {
+      urlStr += '?department_id=$departmentId';
+    }
+
+    final url = Uri.parse(urlStr);
+
+    final response = await http.get(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {
+        'success': true,
+        'data': data['data'] ?? [],
+      };
+    } else {
+      return {'success': false, 'message': data['message'] ?? 'Failed to fetch users'};
+    }
+  } catch (e) {
+    print("getAssignableUsers error: $e");
+    return {'success': false, 'message': 'Network error.'};
+  }
+}
+
+
+static Future<Map<String, dynamic>> createTask(Map<String, dynamic> payload) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+ 
+    final url = Uri.parse('$_baseUrl/api/v1/tasks');
+ 
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode(payload),
+    );
+ 
+    final data = jsonDecode(response.body);
+ 
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return {'success': true, 'data': data};
+    } else {
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Failed to create task',
+      };
+    }
+  } catch (e) {
+    print("createTask error: $e");
     return {'success': false, 'message': 'Network error. Please check your connection.'};
   }
 }

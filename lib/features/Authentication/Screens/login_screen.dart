@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../Providers/auth_providers.dart';
 import '../../Home/Screens/home_screen.dart';
-import '../../Admin/Screens/admin_dashboard.dart';
+import '../../Admin/Dashboard/Screens/admin_dashboard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../Authentication/Providers/auth_providers.dart';
+import '../../../Authentication/Providers/auth_providers.dart';
 import '../Widgets/admin_drawer.dart';
 import '../Widgets/admin_task_table.dart';
-import '../../Admin/Widgets/date_ramge_dialog.dart';   // ← Make sure this path is correct
+import '../Widgets/date_ramge_dialog.dart';
+import '../Widgets/create_task_dialog.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -22,7 +23,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   String _selectedStatus = 'Active';
-  DateFilterResult? _selectedDateFilter;   // Changed to match your dialog
+  DateFilterResult? _selectedDateFilter;
 
   Future<void> _showDateRangeDialog() async {
     final result = await showDateFilterDialog(
@@ -43,7 +44,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: _bg,
-      drawer: const AdminDrawer(),
+      drawer: const AdminDrawer(activeMenu: 'Tasks'),   // Correct active menu
       body: SafeArea(
         child: Column(
           children: [
@@ -78,7 +79,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   fontSize: 15)),
           const Spacer(),
           GestureDetector(
-            onTap: () {},
+            onTap: () {
+              showDialog(
+                context: context,
+                builder: (context) => const CreateTaskDialog(),
+              );
+            },
             child: Container(
               height: 36,
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -126,7 +132,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
           const SizedBox(width: 12),
 
-          // Date Icon
           IconButton(
             icon: const Icon(Icons.calendar_today_outlined,
                 color: _textSec, size: 20),
@@ -157,7 +162,10 @@ class _StatusDropdown extends StatelessWidget {
   final String value;
   final ValueChanged<String?> onChanged;
 
-  const _StatusDropdown({required this.value, required this.onChanged});
+  const _StatusDropdown({
+    required this.value,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
