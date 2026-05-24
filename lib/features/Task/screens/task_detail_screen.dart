@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../Api/api_controller.dart';
 import '../../Models/task_model.dart';
 import '../widgets/task_submission_handler.dart';
+import '../widgets/task_requirements_section.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final TaskModel task;
@@ -34,11 +35,6 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   bool _showRequirements = false;
 
-  // Track YES_NO selections per item id
-  // final Map<String, bool> _yesNoSelections = {};
-  // Track report text controllers per item id
-  // final Map<String, TextEditingController> _reportControllers = {};
-
   @override
   void initState() {
     super.initState();
@@ -57,40 +53,38 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   }
 
   // ── Data loading ──────────────────────────────────────────────────────────
-Future<void> _loadDetail() async {
-  setState(() { _isLoading = true; _error = null; });
-  final result = await ApiController.getTaskDetail(widget.task.id);
-  if (!mounted) return;
+  Future<void> _loadDetail() async {
+    setState(() { _isLoading = true; _error = null; });
+    final result = await ApiController.getTaskDetail(widget.task.id);
+    if (!mounted) return;
 
-  if (result['success'] == true) {
-    final data = result['data'];
-    setState(() {
-      _detail = data;
-      _isLoading = false;
-    });
-
-    final isActive = data['is_timer_active'] == true;
-    final activeLog = data['active_time_log'];
-
-    if (isActive && activeLog != null) {
-      final logId = (activeLog['id'] as num).toInt();
-
-      // Use elapsed_seconds from active_time_log directly — most accurate
-      final elapsedSeconds = (activeLog['elapsed_seconds'] as num?)?.toInt() ?? 0;
-
+    if (result['success'] == true) {
+      final data = result['data'];
       setState(() {
-        _isTimerRunning = true;
-        _currentLogId = logId;
-        _elapsed = Duration(seconds: elapsedSeconds);
+        _detail = data;
+        _isLoading = false;
       });
-      _startTicker();
-    }
-  } else {
-    setState(() { _error = result['message']; _isLoading = false; });
-  }
-}
 
-Future<void> _autoCheckTimerState() async {
+      final isActive = data['is_timer_active'] == true;
+      final activeLog = data['active_time_log'];
+
+      if (isActive && activeLog != null) {
+        final logId = (activeLog['id'] as num).toInt();
+        final elapsedSeconds = (activeLog['elapsed_seconds'] as num?)?.toInt() ?? 0;
+
+        setState(() {
+          _isTimerRunning = true;
+          _currentLogId = logId;
+          _elapsed = Duration(seconds: elapsedSeconds);
+        });
+        _startTicker();
+      }
+    } else {
+      setState(() { _error = result['message']; _isLoading = false; });
+    }
+  }
+
+  Future<void> _autoCheckTimerState() async {
     final result = await ApiController.startTimeLog(widget.task.id);
     if (!mounted) return;
     if (result['success'] == true) {
@@ -127,92 +121,91 @@ Future<void> _autoCheckTimerState() async {
     return h > 0 ? '$h:$m:$s' : '$m:$s';
   }
 
-Future<void> _onStartPressed() async {
-  if (_isTimerRunning) return;
+  Future<void> _onStartPressed() async {
+    if (_isTimerRunning) return;
 
-  setState(() => {
-    _isStartLoading = true,
-    _showRequirements = false
-  });
+    setState(() => {
+      _isStartLoading = true,
+      _showRequirements = false
+    });
 
-  final result = await ApiController.startTimeLog(widget.task.id);
+    final result = await ApiController.startTimeLog(widget.task.id);
 
-  if (!mounted) return;
+    if (!mounted) return;
 
-if (result['success'] == true) {
-  final data = result['data'];
-  final logId = (data['id'] as num).toInt();
+    if (result['success'] == true) {
+      final data = result['data'];
+      final logId = (data['id'] as num).toInt();
 
-  // Use total_time_minutes + total_time_seconds as the base to count from
-  final timeTracking = data['time_tracking'];
-  final totalMinutes = (timeTracking?['total_time_minutes'] as num?)?.toInt() ?? 0;
-  final totalSeconds = (timeTracking?['total_time_seconds'] as num?)?.toInt() ?? 0;
-  final baseElapsed = Duration(minutes: totalMinutes, seconds: totalSeconds);
+      final timeTracking = data['time_tracking'];
+      final totalMinutes = (timeTracking?['total_time_minutes'] as num?)?.toInt() ?? 0;
+      final totalSeconds = (timeTracking?['total_time_seconds'] as num?)?.toInt() ?? 0;
+      final baseElapsed = Duration(minutes: totalMinutes, seconds: totalSeconds);
 
-  setState(() {
-    _isTimerRunning = true;
-    _currentLogId = logId;
-    _elapsed = baseElapsed;  // starts from 25m 30s, ticker adds 1s each tick
-    _isStartLoading = false;
-    _lastTotalFormatted = null;
-    _lastBillable = null;
-  });
+      setState(() {
+        _isTimerRunning = true;
+        _currentLogId = logId;
+        _elapsed = baseElapsed;
+        _isStartLoading = false;
+        _lastTotalFormatted = null;
+        _lastBillable = null;
+      });
 
-  _startTicker();
-}else {
-    setState(() => _isStartLoading = false);
-    if (mounted) {
-      // Check if blocked because another task is active
-      final message = result['message'] ?? '';
-      final isActiveTaskBlock = message.toLowerCase().contains('active') ||
-          message.toLowerCase().contains('already') ||
-          message.toLowerCase().contains('running') ||
-          message.toLowerCase().contains('stop');
+      _startTicker();
+    } else {
+      setState(() => _isStartLoading = false);
+      if (mounted) {
+        final message = result['message'] ?? '';
+        final isActiveTaskBlock = message.toLowerCase().contains('active') ||
+            message.toLowerCase().contains('already') ||
+            message.toLowerCase().contains('running') ||
+            message.toLowerCase().contains('stop');
 
-      if (isActiveTaskBlock) {
-        showDialog(
-          context: context,
-          builder: (_) => AlertDialog(
-            backgroundColor: const Color(0xFF111118),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Row(
-              children: [
-                Icon(Icons.warning_amber_rounded, color: Color(0xFFFF7300), size: 22),
-                SizedBox(width: 10),
-                Text('Task Already Running',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white)),
+        if (isActiveTaskBlock) {
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              backgroundColor: const Color(0xFF111118),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Color(0xFFFF7300), size: 22),
+                  SizedBox(width: 10),
+                  Text('Task Already Running',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white)),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Text(
+                  message.isNotEmpty
+                      ? message
+                      : 'You are currently working on another task. Please stop that task first before starting a new one.',
+                  style: const TextStyle(fontSize: 14.5, color: Color(0xFF8A8A9A), height: 1.5),
+                ),
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF7300),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('OK', style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
               ],
             ),
-            content: SingleChildScrollView(
-  child: Text(
-    message.isNotEmpty
-        ? message
-        : 'You are currently working on another task. Please stop that task first before starting a new one.',
-    style: const TextStyle(fontSize: 14.5, color: Color(0xFF8A8A9A), height: 1.5),
-  ),
-),
-            actions: [
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFF7300),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('OK', style: TextStyle(fontWeight: FontWeight.w700)),
-              ),
-            ],
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(message.isNotEmpty ? message : 'Failed to start timer')),
-        );
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message.isNotEmpty ? message : 'Failed to start timer')),
+          );
+        }
       }
     }
   }
-}
+
   Future<void> _onStopPressed() async {
     if (_currentLogId == -1 || !_isTimerRunning) return;
 
@@ -285,23 +278,23 @@ if (result['success'] == true) {
   }
 
   int _countFilledItems() {
-  int count = 0;
-  final sections = (_detail?['template']?['sections'] as List?) ?? [];
-  for (final section in sections) {
-    for (final item in (section['items'] as List? ?? [])) {
-      final id = item['id'].toString();
-      final type = item['type'] ?? '';
-      if (type == 'YES_NO' && _submission.yesNoAnswers.containsKey(id)) {
-        count++;
-      } else if (type == 'REPORT' && (_submission.reportControllers[id]?.text.trim().isNotEmpty ?? false)) {
-        count++;
-      } else if (type == 'CHECKLIST' && (_submission.checklistAnswers[id] != null && _submission.checklistAnswers[id]!.isNotEmpty)) {
-        count++;
+    int count = 0;
+    final sections = (_detail?['template']?['sections'] as List?) ?? [];
+    for (final section in sections) {
+      for (final item in (section['items'] as List? ?? [])) {
+        final id = item['id'].toString();
+        final type = item['type'] ?? '';
+        if (type == 'YES_NO' && _submission.yesNoAnswers.containsKey(id)) {
+          count++;
+        } else if (type == 'REPORT' && (_submission.reportControllers[id]?.text.trim().isNotEmpty ?? false)) {
+          count++;
+        } else if (type == 'CHECKLIST' && (_submission.checklistAnswers[id] != null && _submission.checklistAnswers[id]!.isNotEmpty)) {
+          count++;
+        }
       }
     }
+    return count;
   }
-  return count;
-}
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
@@ -317,7 +310,7 @@ if (result['success'] == true) {
               SliverToBoxAdapter(child: _buildMapHeader(context)),
               if (_isLoading)
                 const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator(color: const Color(0xFFFF7300))),
+                  child: Center(child: CircularProgressIndicator(color: Color(0xFFFF7300))),
                 )
               else if (_error != null)
                 SliverFillRemaining(
@@ -367,53 +360,59 @@ if (result['success'] == true) {
                         if (_lastTotalFormatted != null || _lastBillable != null)
                           _buildSessionSummary(),
 
-if (_detail!['template'] != null && _showRequirements) ...[
-  _buildSectionHeader('Requirements'),
-  const SizedBox(height: 14),
-  _buildTemplateSections(),
-  const SizedBox(height: 32),
-],
-if (sections.isNotEmpty && _isTimerRunning && _showRequirements) ...[
-  SizedBox(
-    width: double.infinity,
-    height: 52,
-    child: ElevatedButton.icon(
-      onPressed: () {
-_submission.showConfirmAndSubmit(
-  context: context,
-  taskId: widget.task.id,
-  timeLogId: _currentLogId,
-  sections: sections,
-  onSuccess: () {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text(
-          'Task submitted successfully!',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: const Color(0xFF43A047),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  },
-  onStopTimer: _onStopPressed,
-);
-      },
-      icon: const Icon(Icons.assignment_turned_in_rounded, size: 22),
-      label: const Text('Submit Requirements',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF43A047),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      ),
-    ),
-  ),
-  const SizedBox(height: 32),
-],
-                        
+                        // ── Requirements section (now delegated to separate widget) ──
+                        if (_detail!['template'] != null && _showRequirements) ...[
+                          _buildSectionHeader('Requirements'),
+                          const SizedBox(height: 14),
+                          TaskRequirementsSection(
+                            detail: _detail!,
+                            submission: _submission,
+                            onChanged: () => setState(() {}),
+                          ),
+                          const SizedBox(height: 32),
+                        ],
+
+                        if (sections.isNotEmpty && _isTimerRunning && _showRequirements) ...[
+                          SizedBox(
+                            width: double.infinity,
+                            height: 52,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                _submission.showConfirmAndSubmit(
+                                  context: context,
+                                  taskId: widget.task.id,
+                                  timeLogId: _currentLogId,
+                                  sections: sections,
+                                  onSuccess: () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: const Text(
+                                          'Task submitted successfully!',
+                                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                        ),
+                                        backgroundColor: const Color(0xFF43A047),
+                                        behavior: SnackBarBehavior.floating,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      ),
+                                    );
+                                  },
+                                  onStopTimer: _onStopPressed,
+                                );
+                              },
+                              icon: const Icon(Icons.assignment_turned_in_rounded, size: 22),
+                              label: const Text('Submit Requirements',
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF43A047),
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+                        ],
+
                         _buildSectionHeader('Comments'),
                         const SizedBox(height: 14),
                         _buildComments(),
@@ -436,7 +435,7 @@ _submission.showConfirmAndSubmit(
                               : null,
                           showArrow: false,
                         ),
-                        const Divider(height: 1, thickness: 1, color: const Color(0xFF1E1E2E)),
+                        const Divider(height: 1, thickness: 1, color: Color(0xFF1E1E2E)),
                         if (_detail!['estimated_time'] != null) ...[
                           _buildNavRow(
                             icon: Icons.timer_outlined,
@@ -444,7 +443,7 @@ _submission.showConfirmAndSubmit(
                             trailing: _Chip(label: _detail!['estimated_time']),
                             showArrow: false,
                           ),
-                          const Divider(height: 1, thickness: 1, color: const Color(0xFF1E1E2E)),
+                          const Divider(height: 1, thickness: 1, color: Color(0xFF1E1E2E)),
                         ],
                         _buildNavRow(
                           icon: Icons.repeat_rounded,
@@ -619,30 +618,29 @@ _submission.showConfirmAndSubmit(
   }
 
   // ── Info row ──────────────────────────────────────────────────────────────
-Widget _buildInfoRow(IconData icon, String label, String value) {
-  return Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Icon(icon, size: 20, color: const Color(0xFF8A8A9A)),
-      const SizedBox(width: 14),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: const TextStyle(fontSize: 12.5, color: Color(0xFF8A8A9A))),
-            const SizedBox(height: 3),
-            Text(
-              value,
-              style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w500, color: Colors.white),
-              softWrap: true,
-            ),
-          ],
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 20, color: const Color(0xFF8A8A9A)),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontSize: 12.5, color: Color(0xFF8A8A9A))),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                style: const TextStyle(fontSize: 15.5, fontWeight: FontWeight.w500, color: Colors.white),
+                softWrap: true,
+              ),
+            ],
+          ),
         ),
-      ),
-    ],
-  );
-}
-
+      ],
+    );
+  }
 
   // ── Tags ──────────────────────────────────────────────────────────────────
   Widget _buildTagsRow() {
@@ -672,57 +670,56 @@ Widget _buildInfoRow(IconData icon, String label, String value) {
     );
   }
 
-
   // ── Action tiles ──────────────────────────────────────────────────────────
-Widget _buildActionTiles() {
-  final sections = (_detail!['template']?['sections'] as List?) ?? [];
-  final totalItems = sections.fold<int>(0, (sum, s) => sum + ((s['items'] as List?)?.length ?? 0));
-  final commentsCount = _detail!['comments_count'] ?? 0;
+  Widget _buildActionTiles() {
+    final sections = (_detail!['template']?['sections'] as List?) ?? [];
+    final totalItems = sections.fold<int>(0, (sum, s) => sum + ((s['items'] as List?)?.length ?? 0));
+    final commentsCount = _detail!['comments_count'] ?? 0;
 
-  return Row(
-    children: [
-      _ActionTile(
-        icon: Icons.rule_rounded,
-        label: 'Requirements',
-        badge: '${_countFilledItems()}/$totalItems',
-        onTap: () {
-          if (!_isTimerRunning) {
-            ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: const Row(
-        children: [
-          Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
-          SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Please start work first to view requirements.',
-              style: TextStyle(fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
-                backgroundColor: const Color(0xFF333344),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            );
-            return;
-          }
-          setState(() => _showRequirements = !_showRequirements);
-        },
-      ),
-      const SizedBox(width: 12),
-      _ActionTile(icon: Icons.attach_file_rounded, label: 'Attachments', onTap: () {}),
-      const SizedBox(width: 12),
-      _ActionTile(
-        icon: Icons.chat_bubble_outline_rounded,
-        label: 'Comments',
-        badge: '$commentsCount',
-        onTap: () {},
-      ),
-    ],
-  );
-}
+    return Row(
+      children: [
+        _ActionTile(
+          icon: Icons.rule_rounded,
+          label: 'Requirements',
+          badge: '${_countFilledItems()}/$totalItems',
+          onTap: () {
+            if (!_isTimerRunning) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Please start work first to view requirements.',
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: const Color(0xFF333344),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              );
+              return;
+            }
+            setState(() => _showRequirements = !_showRequirements);
+          },
+        ),
+        const SizedBox(width: 12),
+        _ActionTile(icon: Icons.attach_file_rounded, label: 'Attachments', onTap: () {}),
+        const SizedBox(width: 12),
+        _ActionTile(
+          icon: Icons.chat_bubble_outline_rounded,
+          label: 'Comments',
+          badge: '$commentsCount',
+          onTap: () {},
+        ),
+      ],
+    );
+  }
 
   // ── Session summary ───────────────────────────────────────────────────────
   Widget _buildSessionSummary() {
@@ -777,155 +774,6 @@ Widget _buildActionTiles() {
     );
   }
 
-  // ── Template sections ─────────────────────────────────────────────────────
-  Widget _buildTemplateSections() {
-    final sections = (_detail!['template']['sections'] as List?) ?? [];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: sections.map<Widget>((section) {
-        final items = (section['items'] as List?) ?? [];
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF16161F),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFF1E1E2E)),
-              ),
-              child: Text(
-                section['title'] ?? '',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFFFF7300),
-                  letterSpacing: 0.6,
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            ...items.map<Widget>((item) => _buildTemplateItem(item)),
-            const SizedBox(height: 16),
-          ],
-        );
-      }).toList(),
-    );
-  }
-
-Widget _buildTemplateItem(Map<String, dynamic> item) {
-  final type = item['type'] ?? '';
-  final itemId = item['id'].toString();
-  _submission.initItem(item);
-
-  return Container(
-    margin: const EdgeInsets.only(bottom: 12),
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: const Color(0xFF16161F),
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: const Color(0xFF1E1E2E)),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Text(item['question'] ?? '',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Colors.white)),
-            ),
-            const SizedBox(width: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF7300).withOpacity(0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(type,
-                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFFFF7300))),
-            ),
-          ],
-        ),
-        if (type == 'YES_NO') ...[
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _SelectableYesNoBtn(
-                label: 'Yes',
-                color: const Color(0xFF43A047),
-                isSelected: _submission.yesNoAnswers[itemId] == 'YES',
-                onTap: () => setState(() => _submission.yesNoAnswers[itemId] = 'YES'),
-              ),
-              const SizedBox(width: 10),
-              _SelectableYesNoBtn(
-                label: 'No',
-                color: const Color(0xFFFF6B6B),
-                isSelected: _submission.yesNoAnswers[itemId] == 'NO',
-                onTap: () => setState(() => _submission.yesNoAnswers[itemId] = 'NO'),
-              ),
-            ],
-          ),
-        ],
-        if (type == 'CHECKLIST') ...[
-          const SizedBox(height: 12),
-          ...(item['options'] as List? ?? []).map<Widget>((opt) {
-            final optText = opt['text'] ?? '';
-            final isSelected = _submission.checklistAnswers[itemId] == optText;
-            return GestureDetector(
-              onTap: () => setState(() => _submission.checklistAnswers[itemId] = optText),
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: isSelected ? const Color(0xFFFF7300).withOpacity(0.15) : Colors.transparent,
-                        border: Border.all(
-                          color: isSelected ? const Color(0xFFFF7300) : const Color(0xFF8A8A9A),
-                          width: isSelected ? 1.5 : 1,
-                        ),
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: isSelected
-                          ? const Icon(Icons.check, size: 13, color: Color(0xFFFF7300))
-                          : null,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(optText, style: const TextStyle(fontSize: 14, color: Colors.white)),
-                  ],
-                ),
-              ),
-            );
-          }),
-        ],
-        if (type == 'REPORT') ...[
-          const SizedBox(height: 12),
-          TextField(
-            controller: _submission.reportControllers[itemId],
-            minLines: 3,
-            maxLines: 6,
-            style: const TextStyle(fontSize: 14, color: Colors.white),
-            decoration: InputDecoration(
-              hintText: 'Enter report…',
-              hintStyle: const TextStyle(fontSize: 14, color: Color(0xFF8A8A9A)),
-              filled: true,
-              fillColor: const Color(0xFF111118),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF1E1E2E))),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF1E1E2E))),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFF7300), width: 1.5)),
-            ),
-          ),
-        ],
-      ],
-    ),
-  );
-}
   // ── Comments ──────────────────────────────────────────────────────────────
   Widget _buildComments() {
     final comments = (_detail!['comments'] as List?) ?? [];
@@ -988,7 +836,7 @@ Widget _buildTemplateItem(Map<String, dynamic> item) {
   // ── Time logs ─────────────────────────────────────────────────────────────
   Widget _buildTimeLogs() {
     final logs = (_detail!['time_logs'] as List?) ?? [];
-    final totalHours   = _detail!['total_time_spent_hours'] ?? '0';
+    final totalHours    = _detail!['total_time_spent_hours'] ?? '0';
     final totalBillable = _detail!['total_billable_amount'] ?? 0;
 
     return Column(
@@ -1085,116 +933,114 @@ Widget _buildTemplateItem(Map<String, dynamic> item) {
               ),
             ),
             if (trailing != null) ...[trailing, const SizedBox(width: 8)],
-            if (showArrow) const Icon(Icons.chevron_right_rounded, size: 22, color: const Color(0xFF8A8A9A)),
+            if (showArrow) const Icon(Icons.chevron_right_rounded, size: 22, color: Color(0xFF8A8A9A)),
           ],
         ),
       ),
     );
   }
 
-Widget _buildBottomBar(BuildContext context) {
-  final bottomPad = MediaQuery.of(context).padding.bottom;
+  // ── Bottom bar ────────────────────────────────────────────────────────────
+  Widget _buildBottomBar(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).padding.bottom;
 
-  return Container(
-    padding: EdgeInsets.fromLTRB(16, 14, 16, bottomPad + 16),
-    decoration: BoxDecoration(
-      color: const Color(0xFF111118),
-      border: const Border(top: BorderSide(color: Color(0xFF1E1E2E), width: 1)),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.4),
-          blurRadius: 20,
-          offset: const Offset(0, -6),
-        ),
-      ],
-    ),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (_isTimerRunning) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF43A047).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF43A047).withOpacity(0.3)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.radio_button_checked, color: Color(0xFF43A047), size: 16),
-                const SizedBox(width: 10),
-                Text(
-                  'Time running · ${_formatElapsed(_elapsed)}',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF43A047),
-                    letterSpacing: 0.6,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
-            ),
+    return Container(
+      padding: EdgeInsets.fromLTRB(16, 14, 16, bottomPad + 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111118),
+        border: const Border(top: BorderSide(color: Color(0xFF1E1E2E), width: 1)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.4),
+            blurRadius: 20,
+            offset: const Offset(0, -6),
           ),
         ],
-        if (!_isTimerRunning)
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton.icon(
-              onPressed: !_isStartLoading ? _onStartPressed : null,
-              icon: _isStartLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                    )
-                  : const Icon(Icons.play_arrow_rounded, size: 24),
-              label: const Text('Start', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF7300),
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: const Color(0xFFFF7300).withOpacity(0.4),
-                disabledForegroundColor: Colors.white70,
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_isTimerRunning) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF43A047).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF43A047).withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.radio_button_checked, color: Color(0xFF43A047), size: 16),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Time running · ${_formatElapsed(_elapsed)}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF43A047),
+                      letterSpacing: 0.6,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-        if (_isTimerRunning)
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton.icon(
-              onPressed: !_isStopLoading ? _onStopPressed : null,
-              icon: _isStopLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                    )
-                  : const Icon(Icons.stop_rounded, size: 24),
-              label: const Text('Stop', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF6B6B),
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: const Color(0xFFFF6B6B).withOpacity(0.35),
-                disabledForegroundColor: Colors.white70,
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ],
+          if (!_isTimerRunning)
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton.icon(
+                onPressed: !_isStartLoading ? _onStartPressed : null,
+                icon: _isStartLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                      )
+                    : const Icon(Icons.play_arrow_rounded, size: 24),
+                label: const Text('Start', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF7300),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: const Color(0xFFFF7300).withOpacity(0.4),
+                  disabledForegroundColor: Colors.white70,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
               ),
             ),
-          ),
-      ],
-    ),
-  );
+          if (_isTimerRunning)
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton.icon(
+                onPressed: !_isStopLoading ? _onStopPressed : null,
+                icon: _isStopLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                      )
+                    : const Icon(Icons.stop_rounded, size: 24),
+                label: const Text('Stop', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF6B6B),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: const Color(0xFFFF6B6B).withOpacity(0.35),
+                  disabledForegroundColor: Colors.white70,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
-
-}
-
-
 
 // ── Local widgets ─────────────────────────────────────────────────────────────
 
@@ -1255,46 +1101,6 @@ class _ActionTile extends StatelessWidget {
                   style: const TextStyle(fontSize: 12.5, color: Color(0xFF8A8A9A), fontWeight: FontWeight.w500),
                   textAlign: TextAlign.center),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SelectableYesNoBtn extends StatelessWidget {
-  final String label;
-  final Color color;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _SelectableYesNoBtn({
-    required this.label,
-    required this.color,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 9),
-        decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.18) : color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isSelected ? color : color.withOpacity(0.4),
-            width: isSelected ? 1.5 : 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14.5,
-            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-            color: color,
           ),
         ),
       ),

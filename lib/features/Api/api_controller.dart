@@ -724,4 +724,182 @@ static Future<Map<String, dynamic>> createTask(Map<String, dynamic> payload) asy
 
 
 
+
+//  static Future<Map<String, dynamic>> uploadSingleFile({
+//   required File file,
+//   required String folder,
+// }) async {
+//   try {
+//     final prefs = await SharedPreferences.getInstance();
+//     final token = prefs.getString('token') ?? '';
+
+//     final url = Uri.parse('$_baseUrl/api/v1/files/upload/single');
+
+//     final request = http.MultipartRequest('POST', url);
+//     request.headers['Authorization'] = 'Bearer $token';
+
+//     final fileName = file.path.split('/').last;
+
+//     // Force correct MIME type - This is the most important fix
+//     request.files.add(await http.MultipartFile.fromPath(
+//       'file',
+//       file.path,
+//       filename: fileName,
+//       contentType: _getMimeType(fileName),   // ← Force MIME type
+//     ));
+
+//     request.fields['folder'] = folder;
+
+//     print("Uploading: $fileName");
+
+//     final response = await request.send();
+//     final responseBody = await response.stream.bytesToString();
+//     final data = jsonDecode(responseBody);
+
+//     print('Upload Response: $data');
+
+//     if (response.statusCode == 200 && data['success'] == true) {
+//       return {'success': true, 'data': data['data'], 'message': data['message']};
+//     } else {
+//       return {
+//         'success': false,
+//         'message': data['message'] ?? 'Upload failed'
+//       };
+//     }
+//   } catch (e) {
+//     print("uploadSingleFile error: $e");
+//     return {'success': false, 'message': 'Network error'};
+//   }
+// }
+
+
+/// Upload Single File
+  static Future<Map<String, dynamic>> uploadSingleFile({
+    required File file,
+    required String folder,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      final url = Uri.parse('$_baseUrl/api/v1/files/upload/single');
+
+      final request = http.MultipartRequest('POST', url);
+      request.headers['Authorization'] = 'Bearer $token';
+
+      final fileName = file.path.split('/').last;
+
+      request.files.add(await http.MultipartFile.fromPath(
+        'file',
+        file.path,
+        filename: fileName,
+        contentType: _getMimeType(fileName),
+      ));
+
+      request.fields['folder'] = folder;
+
+      print("Uploading Single: $fileName");
+
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+      final data = jsonDecode(responseBody);
+
+      print('Single Upload Response: $data');
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {
+          'success': true,
+          'data': data['data'],
+          'message': data['message']
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Upload failed'
+        };
+      }
+    } catch (e) {
+      print("uploadSingleFile error: $e");
+      return {'success': false, 'message': 'Network error'};
+    }
+  }
+
+  /// Upload Multiple Files (Improved with MIME Type)
+  static Future<Map<String, dynamic>> uploadMultipleFiles({
+    required List<File> files,
+    required String folder,
+    int maxFiles = 5,
+  }) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token') ?? '';
+
+      final url = Uri.parse('$_baseUrl/api/v1/files/upload/multiple');
+
+      final request = http.MultipartRequest('POST', url);
+      request.headers['Authorization'] = 'Bearer $token';
+
+      // Add multiple files with proper MIME type
+      for (var file in files) {
+        final fileName = file.path.split('/').last;
+        request.files.add(await http.MultipartFile.fromPath(
+          'files',
+          file.path,
+          filename: fileName,
+          contentType: _getMimeType(fileName),
+        ));
+      }
+
+      request.fields['folder'] = folder;
+      request.fields['max_files'] = maxFiles.toString();
+
+      print("Uploading ${files.length} files...");
+
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+      final data = jsonDecode(responseBody);
+
+      print('Multiple Files Upload Response: $data');
+
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {
+          'success': true,
+          'data': data['data'] ?? [],
+          'message': data['message']
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to upload files'
+        };
+      }
+    } catch (e) {
+      print("uploadMultipleFiles error: $e");
+      return {
+        'success': false,
+        'message': 'Network error. Please check your connection.'
+      };
+    }
+  }
+
+  // Helper function (Shared by both single and multiple)
+  static http.MediaType _getMimeType(String fileName) {
+    final ext = fileName.toLowerCase().split('.').last;
+    switch (ext) {
+      case 'jpg':
+      case 'jpeg':
+        return http.MediaType('image', 'jpeg');
+      case 'png':
+        return http.MediaType('image', 'png');
+      case 'gif':
+        return http.MediaType('image', 'gif');
+      case 'webp':
+        return http.MediaType('image', 'webp');
+      default:
+        return http.MediaType('application', 'octet-stream');
+    }
+  }
+
+
+
 }
