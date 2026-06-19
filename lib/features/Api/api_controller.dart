@@ -900,6 +900,125 @@ static Future<Map<String, dynamic>> createTask(Map<String, dynamic> payload) asy
     }
   }
 
+static Future<Map<String, dynamic>> getMyCards({int page = 1}) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+ 
+    final url = Uri.parse('$_baseUrl/api/v1/cards/my_cards?page=$page');
+    final response = await http.get(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+ 
+    final data = jsonDecode(response.body);
+    print("getMyCards page=$page response- $data");
+ 
+    if (response.statusCode == 200 && data['success'] == true) {
+      final pagination = data['meta']?['pagination'];
+      final totalPages = (pagination?['totalPages'] as num?)?.toInt() ?? 1;
+ 
+      return {
+        'success': true,
+        'data': data['data'] ?? [],
+        'totalPages': totalPages,
+      };
+    } else {
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Failed to fetch cards',
+      };
+    }
+  } catch (e) {
+    print("getMyCards error: $e");
+    return {
+      'success': false,
+      'message': 'Network error. Please check your connection.',
+    };
+  }
+}
+
+static Future<Map<String, dynamic>> updateChecklistItem({
+  required int cardId,
+  required int checklistId,
+  required int itemId,
+  required bool isDone,
+}) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    final url = Uri.parse(
+        '$_baseUrl/api/v1/cards/$cardId/checklists/$checklistId/items/$itemId');
+
+    final response = await http.put(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'is_done': isDone}),
+    );
+
+    final data = jsonDecode(response.body);
+    print("updateChecklistItem response- $data");
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {'success': true, 'data': data};
+    } else {
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Failed to update checklist item',
+      };
+    }
+  } catch (e) {
+    print("updateChecklistItem error: $e");
+    return {
+      'success': false,
+      'message': 'Network error. Please check your connection.',
+    };
+  }
+}
+
+static Future<Map<String, dynamic>> submitCardAsCompleted(int cardId) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    final url = Uri.parse('$_baseUrl/api/v1/cards/$cardId');
+
+    final response = await http.put(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'status': 'COMPLETED',
+      }),
+    );
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {'success': true, 'data': data};
+    } else {
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Failed to submit task'
+      };
+    }
+  } catch (e) {
+    print("submitCardAsCompleted error: $e");
+    return {
+      'success': false,
+      'message': 'Network error. Please check your connection.'
+    };
+  }
+}
 
 
 }

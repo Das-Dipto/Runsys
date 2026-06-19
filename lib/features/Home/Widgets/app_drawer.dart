@@ -4,6 +4,7 @@ import '../../Authentication/Providers/auth_providers.dart';
 import '../../Profile/Screens/profile_screen.dart';
 import '../../Home/Screens/home_screen.dart';
 import '../../History/Screens/history_screen.dart';
+import '../../Board/Screens/board_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
@@ -31,6 +32,7 @@ class _AppDrawerState extends State<AppDrawer> {
     {'icon': Icons.notifications_none_rounded, 'label': 'Notifications'},
     {'icon': Icons.playlist_add_check_rounded, 'label': 'My tasks'},
     {'icon': Icons.history_rounded,            'label': 'My history'},
+    {'icon': Icons.calendar_today,             'label': 'Board'},
   ];
 
   String _initials(String fullName) {
@@ -153,9 +155,16 @@ onTap: () {
         context,
         MaterialPageRoute(builder: (_) => const HistoryScreen()),
       );
+    }else if (index == 3) {
+      // Board → BoardScreen (to be created)
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const BoardScreen()),
+      );
     }
   });
-},           
+}
+
               );
             }),
 

@@ -23,7 +23,6 @@ class TaskRequirementsSection extends StatefulWidget {
 
 class _TaskRequirementsSectionState extends State<TaskRequirementsSection> {
   final _picker = ImagePicker();
-  final Map<String, List<File>> _localPendingImages = {};
   final Map<String, bool> _isUploadingMap = {};
 
   Future<void> _showImageSourceDialog(String itemId) async {
@@ -87,65 +86,29 @@ class _TaskRequirementsSectionState extends State<TaskRequirementsSection> {
 
     if (croppedFile == null) return;
 
-    setState(() {
-      _localPendingImages.putIfAbsent(itemId, () => []);
-      _localPendingImages[itemId]!.add(File(croppedFile.path));
-    });
-    widget.onChanged();
+    // Auto upload immediately after crop
+    await _uploadImage(itemId, File(croppedFile.path));
   }
 
-  void _removeLocalImage(String itemId, int index) {
-    setState(() {
-      _localPendingImages[itemId]?.removeAt(index);
-      if (_localPendingImages[itemId]?.isEmpty ?? true) {
-        _localPendingImages.remove(itemId);
-      }
-    });
-    widget.onChanged();
-  }
-
-  Future<void> _uploadPendingImages(String itemId) async {
-    final pendingFiles = _localPendingImages[itemId];
-    if (pendingFiles == null || pendingFiles.isEmpty) return;
-
+  Future<void> _uploadImage(String itemId, File file) async {
     setState(() => _isUploadingMap[itemId] = true);
 
-    Map<String, dynamic> response;
-    if (pendingFiles.length == 1) {
-      response = await ApiController.uploadSingleFile(
-        file: pendingFiles.first,
-        folder: 'task_requirements',
-      );
-    } else {
-      response = await ApiController.uploadMultipleFiles(
-        files: pendingFiles,
-        folder: 'task_requirements',
-      );
-    }
+    final response = await ApiController.uploadSingleFile(
+      file: file,
+      folder: 'task_requirements',
+    );
 
     setState(() => _isUploadingMap[itemId] = false);
 
     if (response['success'] == true) {
       setState(() {
-        _localPendingImages.remove(itemId);
-        widget.submission.imageFiles.putIfAbsent(itemId, () => []);
+        final url = response['data']['cdn_url'] ?? response['data']['original_url'];
+        if (url != null) {
+          widget.submission.uploadedImageUrls.putIfAbsent(itemId, () => []);
+          widget.submission.uploadedImageUrls[itemId]!.add(url as String);
 
-        if (response['data'] is List) {
-          for (var item in response['data']) {
-            final url = item['cdn_url'] ?? item['original_url'];
-            if (url != null) {
-              widget.submission.uploadedImageUrls
-                  .putIfAbsent(itemId, () => [])
-                  .add(url as String);
-            }
-          }
-        } else if (response['data'] is Map) {
-          final url = response['data']['cdn_url'] ?? response['data']['original_url'];
-          if (url != null) {
-            widget.submission.uploadedImageUrls
-                .putIfAbsent(itemId, () => [])
-                .add(url as String);
-          }
+          widget.submission.imageFiles.putIfAbsent(itemId, () => []);
+          widget.submission.imageFiles[itemId]!.add(file);
         }
       });
 
@@ -167,6 +130,24 @@ class _TaskRequirementsSectionState extends State<TaskRequirementsSection> {
         ));
       }
     }
+  }
+
+  void _removeUploadedImage(String itemId, int index) {
+    setState(() {
+      widget.submission.uploadedImageUrls[itemId]?.removeAt(index);
+      if (widget.submission.uploadedImageUrls[itemId]?.isEmpty ?? true) {
+        widget.submission.uploadedImageUrls.remove(itemId);
+      }
+      // Keep imageFiles in sync
+      if (widget.submission.imageFiles[itemId] != null &&
+          widget.submission.imageFiles[itemId]!.length > index) {
+        widget.submission.imageFiles[itemId]!.removeAt(index);
+        if (widget.submission.imageFiles[itemId]!.isEmpty) {
+          widget.submission.imageFiles.remove(itemId);
+        }
+      }
+    });
+    widget.onChanged();
   }
 
   @override
@@ -222,7 +203,7 @@ class _TaskRequirementsSectionState extends State<TaskRequirementsSection> {
       }
     }
 
-    // PHOTO type always shows uploader regardless of image_mandatory
+    // PHOTO type always shows uploader
     if (type == 'PHOTO') showImageUploader = true;
 
     return Container(
@@ -288,7 +269,7 @@ class _TaskRequirementsSectionState extends State<TaskRequirementsSection> {
                     setState(() {
                       widget.submission.yesNoAnswers[itemId] = 'NO';
                       widget.submission.imageFiles[itemId]?.clear();
-                      _localPendingImages[itemId]?.clear();
+                      widget.submission.uploadedImageUrls[itemId]?.clear();
                     });
                     widget.onChanged();
                   },
@@ -459,21 +440,23 @@ class _TaskRequirementsSectionState extends State<TaskRequirementsSection> {
     );
   }
 
-  // ── Image uploader ─────────────────────────────────────────────────────────
+  // ── Image uploader (Auto-upload after crop) ─────────────────────────────────
   Widget _buildImageUploader(String itemId) {
-    final pendingImages = _localPendingImages[itemId] ?? <File>[];
-    final uploadedImages = widget.submission.imageFiles[itemId] ?? <File>[];
+    final uploadedFiles = widget.submission.imageFiles[itemId] ?? <File>[];
+    final uploadedUrls = widget.submission.uploadedImageUrls[itemId] ?? <String>[];
     final isUploading = _isUploadingMap[itemId] == true;
+    final uploadedCount = uploadedUrls.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Header
         Row(
           children: [
             const Icon(Icons.camera_alt_outlined, size: 15, color: Color(0xFFFF7300)),
             const SizedBox(width: 6),
             Text(
-              _imageMandatoryHeadline(uploadedImages, pendingImages),
+              _imageMandatoryHeadline(uploadedCount),
               style: const TextStyle(
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
@@ -481,112 +464,76 @@ class _TaskRequirementsSectionState extends State<TaskRequirementsSection> {
             ),
           ],
         ),
-        if (pendingImages.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          ElevatedButton.icon(
-            onPressed: isUploading ? null : () => _uploadPendingImages(itemId),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF7300),
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: const Color(0xFFFF7300).withOpacity(0.4),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            icon: isUploading
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.cloud_upload_outlined, size: 16),
-            label: Text(
-              pendingImages.length == 1
-                  ? "Save Image"
-                  : "Upload All (${pendingImages.length})",
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
         const SizedBox(height: 10),
 
-        // Uploaded previews
-        if (uploadedImages.isNotEmpty) ...[
-          const Text("Uploaded to Server:",
-              style: TextStyle(
-                  fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: List.generate(uploadedImages.length, (index) {
-              return Opacity(
-                opacity: 0.6,
-                child: Container(
-                  height: 100,
-                  width: 100,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF43A047), width: 1.5),
-                  ),
-                  child: Stack(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.file(uploadedImages[index],
-                            height: 100, width: 100, fit: BoxFit.cover),
-                      ),
-                      const Positioned(
-                        bottom: 4,
-                        right: 4,
-                        child: Icon(Icons.check_circle,
-                            color: Color(0xFF43A047), size: 18),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
+        // Uploaded images
+        if (uploadedCount > 0) ...[
+          Row(
+            children: [
+              const Icon(Icons.check_circle_outline, size: 13, color: Color(0xFF43A047)),
+              const SizedBox(width: 5),
+              Text(
+                '$uploadedCount image${uploadedCount == 1 ? '' : 's'} saved',
+                style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF43A047),
+                    fontWeight: FontWeight.w600),
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-        ],
-
-        // Staged previews
-        if (pendingImages.isNotEmpty) ...[
-          const Text("Staged Preview (Click Upload):",
-              style: TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFFFF7300),
-                  fontWeight: FontWeight.w500)),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Wrap(
             spacing: 10,
             runSpacing: 10,
-            children: List.generate(pendingImages.length, (index) {
+            children: List.generate(uploadedCount, (index) {
+              final hasLocalFile =
+                  index < uploadedFiles.length && uploadedFiles[index].existsSync();
               return Stack(
                 children: [
                   Container(
+                    height: 100,
+                    width: 100,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                          color: const Color(0xFFFF7300).withOpacity(0.5), width: 1),
+                      border: Border.all(color: const Color(0xFF43A047), width: 1.5),
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(9),
-                      child: Image.file(pendingImages[index],
-                          height: 120, width: 120, fit: BoxFit.cover),
+                      borderRadius: BorderRadius.circular(8),
+                      child: hasLocalFile
+                          ? Image.file(uploadedFiles[index],
+                              height: 100, width: 100, fit: BoxFit.cover)
+                          : Image.network(
+                              uploadedUrls[index],
+                              height: 100,
+                              width: 100,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Center(
+                                child: Icon(Icons.broken_image,
+                                    color: Color(0xFF8A8A9A), size: 28),
+                              ),
+                            ),
                     ),
                   ),
+                  // Green check badge
+                  const Positioned(
+                    bottom: 5,
+                    left: 5,
+                    child: Icon(Icons.check_circle, color: Color(0xFF43A047), size: 16),
+                  ),
+                  // Red delete button
                   Positioned(
-                    top: 6,
-                    right: 6,
+                    top: 5,
+                    right: 5,
                     child: GestureDetector(
-                      onTap: () => _removeLocalImage(itemId, index),
+                      onTap: () => _removeUploadedImage(itemId, index),
                       child: Container(
-                        padding: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.all(3),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.7),
+                          color: Colors.black.withOpacity(0.75),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.close, size: 16, color: Colors.white),
+                        child: const Icon(Icons.close,
+                            size: 14, color: Color(0xFFFF6B6B)),
                       ),
                     ),
                   ),
@@ -616,7 +563,7 @@ class _TaskRequirementsSectionState extends State<TaskRequirementsSection> {
                     size: 26, color: const Color(0xFFFF7300).withOpacity(0.8)),
                 const SizedBox(height: 4),
                 const Text(
-                  'Add Photo to Batch',
+                  'Add Photo',
                   style: TextStyle(
                       fontSize: 13,
                       color: Color(0xFFFF7300),
@@ -630,9 +577,9 @@ class _TaskRequirementsSectionState extends State<TaskRequirementsSection> {
     );
   }
 
-  String _imageMandatoryHeadline(List uploaded, List pending) {
-    if (uploaded.isEmpty && pending.isEmpty) return 'Photo Required';
-    return 'Photos (${uploaded.length} Active / ${pending.length} Unsaved)';
+  String _imageMandatoryHeadline(int uploadedCount) {
+    if (uploadedCount == 0) return 'Photo Required';
+    return 'Photos ($uploadedCount Saved)';
   }
 }
 

@@ -211,38 +211,40 @@ class _SplashScreenState extends State<SplashScreen>
                           width: 110,
                           height: 110,
                           decoration: BoxDecoration(
-                            color: surfaceCard,
+                            // color: const Color(0xFF421A86), // from color palette
+                            color: const Color.fromARGB(255, 255, 115, 0), // from color palette
                             borderRadius: BorderRadius.circular(28),
                             border: Border.all(
-                              color: orange.withOpacity(0.30),
+                              // color: const Color(0xFF9029FF).withOpacity(0.30),
+                              color: const Color.fromARGB(255, 255, 115, 0).withOpacity(0.30),
                               width: 1.5,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: orange.withOpacity(0.28),
+                                // color: const Color(0xFF9029FF).withOpacity(0.28),
+                                color: const Color.fromARGB(255, 255, 115, 0).withOpacity(0.28),
                                 blurRadius: 48,
                                 spreadRadius: 0,
                                 offset: const Offset(0, 8),
                               ),
                               BoxShadow(
-                                color: orange.withOpacity(0.12),
+                                // color: const Color(0xFF9029FF).withOpacity(0.12),
+                                color: const Color.fromARGB(255, 255, 115, 0).withOpacity(0.12),
                                 blurRadius: 80,
                                 spreadRadius: 10,
                               ),
                             ],
                           ),
                           child: Center(
-                            child: SizedBox(
-                              width: 58,
-                              height: 58,
-                              child: CustomPaint(
-                                painter: _ModernLogoMark(
-                                    orange, orangeAlt, surfaceCard),
-                              ),
+                            child: Image.asset(
+                              'assets/icons/runsys-white.png',
+                              width: 62,
+                              height: 62,
+                              fit: BoxFit.contain,
                             ),
                           ),
                         ),
-
+                       
                         const SizedBox(height: 28),
 
                         // ── Runsys wordmark ──

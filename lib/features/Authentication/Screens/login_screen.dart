@@ -389,27 +389,28 @@ class _LoginScreenState extends State<LoginScreen>
                                   borderRadius: BorderRadius.circular(18),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: _orange.withOpacity(0.40),
+                                      color: const Color.fromARGB(255, 255, 115, 0).withOpacity(0.40),
                                       blurRadius: 32,
                                       spreadRadius: 0,
                                       offset: const Offset(0, 8),
                                     ),
                                     BoxShadow(
-                                      color: _orange.withOpacity(0.18),
+                                      // color: const Color(0xFF9029FF).withOpacity(0.18),
+                                      color: const Color.fromARGB(255, 255, 115, 0).withOpacity(0.40),
                                       blurRadius: 60,
                                       spreadRadius: 8,
                                     ),
                                   ],
                                 ),
-                                child: const Center(
-                                  child: Icon(
-                                    Icons.vpn_key_rounded,
-                                    color: Colors.white,
-                                    size: 30,
+                                child: Center(
+                                  child: Image.asset(
+                                    'assets/icons/runsys-white-icon.png',
+                                    width: 38,
+                                    height: 38,
+                                    fit: BoxFit.contain,
                                   ),
                                 ),
                               ),
-
                               const SizedBox(height: 24),
 
                               RichText(

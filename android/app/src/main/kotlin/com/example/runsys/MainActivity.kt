@@ -1,4 +1,4 @@
-package com.example.runsys
+package app.runsys.runsys
 
 import io.flutter.embedding.android.FlutterActivity
 

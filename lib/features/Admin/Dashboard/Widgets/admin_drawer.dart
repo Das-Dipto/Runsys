@@ -8,7 +8,6 @@ import '../../Properties/Screens/properties_screen.dart';
 import '../../Settings/Screens/settings_screen.dart';
 
 class AdminDrawer extends StatelessWidget {
-  /// Pass the label of the currently active screen, e.g. 'Tasks', 'Properties'
   final String activeMenu;
 
   const AdminDrawer({super.key, this.activeMenu = 'Properties'});
@@ -20,9 +19,143 @@ class AdminDrawer extends StatelessWidget {
   static const Color _textSec   = Color(0xFF8A8A9A);
   static const Color _border    = Color(0xFF1E1E2E);
 
+  void _showLogoutSheet(BuildContext rootContext) {
+    showModalBottomSheet(
+      context: rootContext,
+      backgroundColor: const Color(0xFF111118),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2A2A3A),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 22),
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF6B6B).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFFF6B6B).withOpacity(0.3)),
+                  ),
+                  child: const Icon(Icons.logout_rounded, color: Color(0xFFFF6B6B), size: 20),
+                ),
+                const SizedBox(width: 14),
+                const Text('Sign out?',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Colors.white)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'You will be signed out of your account',
+              style: TextStyle(fontSize: 13, color: Color(0xFF8A8A9A), height: 1.6),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF8A8A9A),
+                      side: const BorderSide(color: Color(0xFF1E1E2E)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      Navigator.pop(sheetContext);
+
+                      showDialog(
+                        context: rootContext,
+                        barrierDismissible: false,
+                        barrierColor: Colors.black.withOpacity(0.7),
+                        builder: (_) => Dialog(
+                          backgroundColor: const Color(0xFF16161F),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: BorderSide(color: const Color(0xFFFF6B6B).withOpacity(0.3), width: 1),
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF6B6B)),
+                                  ),
+                                ),
+                                SizedBox(width: 18),
+                                Text('Signing out…',
+                                    style: TextStyle(fontSize: 15, color: Colors.white, fontWeight: FontWeight.w500)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+
+                      final auth = Provider.of<AuthProvider>(rootContext, listen: false);
+                      await auth.logout();
+
+                      if (!rootContext.mounted) return;
+                      Navigator.of(rootContext).pop(); // pop loading dialog
+                      Navigator.pushAndRemoveUntil(
+                        rootContext,
+                        PageRouteBuilder(
+                          transitionDuration: const Duration(milliseconds: 500),
+                          pageBuilder: (_, __, ___) => const LoginScreen(),
+                          transitionsBuilder: (_, anim, __, child) =>
+                              FadeTransition(opacity: anim, child: child),
+                        ),
+                        (route) => false,
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF6B6B),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text('Sign out', style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
+    final rootContext = Navigator.of(context).context;
 
     return Drawer(
       backgroundColor: _bg,
@@ -73,8 +206,7 @@ class AdminDrawer extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: _orangeDim,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: _orange.withOpacity(0.35), width: 1),
+                          border: Border.all(color: _orange.withOpacity(0.35), width: 1),
                         ),
                         child: Center(
                           child: Text(
@@ -106,13 +238,11 @@ class AdminDrawer extends StatelessWidget {
                             ),
                             const SizedBox(height: 2),
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 7, vertical: 2),
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                               decoration: BoxDecoration(
                                 color: _orangeDim,
                                 borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                    color: _orange.withOpacity(0.3), width: 1),
+                                border: Border.all(color: _orange.withOpacity(0.3), width: 1),
                               ),
                               child: const Text(
                                 'Admin',
@@ -156,8 +286,7 @@ class AdminDrawer extends StatelessWidget {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                      builder: (_) => const PropertiesScreen()),
+                  MaterialPageRoute(builder: (_) => const PropertiesScreen()),
                 );
               },
             ),
@@ -166,12 +295,11 @@ class AdminDrawer extends StatelessWidget {
               icon: Icons.task_alt_rounded,
               label: 'Tasks',
               isActive: activeMenu == 'Tasks',
-               onTap: () {
+              onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                      builder: (_) => const AdminDashboardScreen()),
+                  MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
                 );
               },
             ),
@@ -184,27 +312,10 @@ class AdminDrawer extends StatelessWidget {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                      builder: (_) => const AssignedTasksScreen()),
+                  MaterialPageRoute(builder: (_) => const AssignedTasksScreen()),
                 );
               },
             ),
-
-
-
-            // _DrawerMenuItem(
-            //   icon: Icons.settings_rounded,
-            //   label: 'Settings',
-            //   isActive: activeMenu == 'Settings',
-            //   onTap: () {
-            //     Navigator.pop(context);
-            //     Navigator.push(
-            //       context,
-            //       MaterialPageRoute(
-            //           builder: (_) => const SettingsScreen()),
-            //     );
-            //   },
-            // ),
 
             const Spacer(),
 
@@ -216,23 +327,9 @@ class AdminDrawer extends StatelessWidget {
                 label: 'Sign Out',
                 isActive: false,
                 isLogout: true,
-                onTap: () async {
-                  Navigator.pop(context);
-                  final auth =
-                      Provider.of<AuthProvider>(context, listen: false);
-                  await auth.logout();
-                  if (context.mounted) {
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      PageRouteBuilder(
-                        transitionDuration: const Duration(milliseconds: 500),
-                        pageBuilder: (_, __, ___) => const LoginScreen(),
-                        transitionsBuilder: (_, anim, __, child) =>
-                            FadeTransition(opacity: anim, child: child),
-                      ),
-                      (route) => false,
-                    );
-                  }
+                onTap: () {
+                  Navigator.pop(context); // close drawer
+                  _showLogoutSheet(rootContext);
                 },
               ),
             ),
@@ -297,15 +394,12 @@ class _DrawerMenuItem extends StatelessWidget {
           splashColor: _orange.withOpacity(0.08),
           highlightColor: _orange.withOpacity(0.05),
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             decoration: BoxDecoration(
               color: isActive ? _orangeDim : Colors.transparent,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isActive
-                    ? _orange.withOpacity(0.25)
-                    : Colors.transparent,
+                color: isActive ? _orange.withOpacity(0.25) : Colors.transparent,
                 width: 1,
               ),
             ),
@@ -318,8 +412,7 @@ class _DrawerMenuItem extends StatelessWidget {
                   style: TextStyle(
                     color: isActive ? _textPri : color,
                     fontSize: 14,
-                    fontWeight:
-                        isActive ? FontWeight.w600 : FontWeight.w400,
+                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
                   ),
                 ),
                 if (isActive) ...[
