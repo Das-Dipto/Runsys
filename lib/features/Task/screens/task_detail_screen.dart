@@ -361,16 +361,31 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
                           _buildSessionSummary(),
 
                         // ── Requirements section (now delegated to separate widget) ──
-                        if (_detail!['template'] != null && _showRequirements) ...[
-                          _buildSectionHeader('Requirements'),
-                          const SizedBox(height: 14),
-                          TaskRequirementsSection(
-                            detail: _detail!,
-                            submission: _submission,
-                            onChanged: () => setState(() {}),
-                          ),
-                          const SizedBox(height: 32),
-                        ],
+                       if (_detail!['template'] != null) ...[
+  Visibility(
+    visible: _showRequirements,
+    maintainState: true,   // keeps the ~150 item widgets mounted, just hidden
+    maintainAnimation: true,
+    maintainSize: false,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('Requirements'),
+        const SizedBox(height: 14),
+        TaskRequirementsSection(
+          detail: _detail!,
+          submission: _submission,
+          taskId: widget.task.id,
+          existingAnswers: (_detail!['existing_responses']?['answers'] as Map?)
+                  ?.cast<String, dynamic>() ??
+              {},
+          onChanged: () => setState(() {}),
+        ),
+        const SizedBox(height: 32),
+      ],
+    ),
+  ),
+],
 
                         if (sections.isNotEmpty && _isTimerRunning && _showRequirements) ...[
                           SizedBox(

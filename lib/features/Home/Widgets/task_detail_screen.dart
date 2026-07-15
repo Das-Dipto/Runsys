@@ -433,6 +433,7 @@ Widget _buildOccupancyStrip() {
             context,
             MaterialPageRoute(
               builder: (_) => RequirementsScreen(
+                taskId: widget.task.id,
                 taskType: widget.task.taskType,
                 propertyName: widget.task.propertyName,
                 address: widget.task.address,

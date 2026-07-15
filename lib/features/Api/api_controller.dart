@@ -164,6 +164,8 @@ class ApiController {
 
       final data = jsonDecode(response.body);
 
+      print("This is the data arrived- $data");
+
       if (response.statusCode == 200 && data['success'] == true) {
         return {'success': true, 'data': data['data'] ?? []};
       } else {
@@ -472,6 +474,55 @@ static Future<Map<String, dynamic>> stopTimeLog(int logId) async {
   }
 }
 
+static Future<Map<String, dynamic>> submitItemResponse({
+  required int taskId,
+  required List<Map<String, dynamic>> items,
+}) async {
+  print("🔥 submitItemResponse CALLED with taskId: $taskId");
+  print("Items: ${jsonEncode(items)}");
+
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    if (token.isEmpty) {
+      print("❌ No token found!");
+      return {'success': false, 'message': 'No authentication token'};
+    }
+
+    final url = Uri.parse('$_baseUrl/api/v1/app_task/tasks/$taskId/item-response');
+    print("📡 Calling URL: $url");
+
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'items': items}),
+    );
+
+    print("📨 Status Code: ${response.statusCode}");
+    final data = jsonDecode(response.body);
+    print('✅ submitItemResponse response- $data');
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {'success': true, 'data': data['data']};
+    } else {
+      return {
+        'success': false,
+        'message': data['message'] ?? 'Failed to submit response',
+      };
+    }
+  } catch (e, stack) {
+    print('❌ submitItemResponse error: $e');
+    print('Stack: $stack');
+    return {
+      'success': false,
+      'message': 'Network error. Please check your connection.',
+    };
+  }
+}
 static Future<Map<String, dynamic>> submitTask({
   required int taskId,
   required List<Map<String, dynamic>> responses,

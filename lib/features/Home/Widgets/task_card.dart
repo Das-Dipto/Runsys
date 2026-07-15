@@ -8,6 +8,7 @@ enum TaskPriority { high, medium, low }
 enum OccupancyType { occupied, checkInOut, vacant }
 
 class TaskItem {
+  final int id;
   final String time;
   final TaskStatus status;
   final TaskPriority priority;
@@ -19,6 +20,7 @@ class TaskItem {
   final String? checkIn;
 
   const TaskItem({
+    required this.id,
     required this.time,
     required this.status,
     required this.priority,
@@ -35,6 +37,7 @@ class TaskItem {
 
 final List<TaskItem> todayTasks = [
   const TaskItem(
+    id:1,
     time: '10:00 AM',
     status: TaskStatus.newTask,
     priority: TaskPriority.high,
@@ -44,6 +47,7 @@ final List<TaskItem> todayTasks = [
     occupancy: OccupancyType.occupied,
   ),
   const TaskItem(
+    id:2,
     time: '1:00 PM',
     status: TaskStatus.newTask,
     priority: TaskPriority.high,
@@ -55,6 +59,7 @@ final List<TaskItem> todayTasks = [
     checkIn: '4:00 PM',
   ),
   const TaskItem(
+    id:3,
     time: '4:00 PM',
     status: TaskStatus.newTask,
     priority: TaskPriority.high,
