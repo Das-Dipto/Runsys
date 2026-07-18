@@ -67,11 +67,36 @@ class _GenericTaskListState extends State<GenericTaskList> {
     if (!mounted) return;
 
     if (result['success'] == true) {
-      setState(() {
-        _tasks = result['data'] ?? [];
-        _isLoading = false;
-      });
-    } else {
+  List<dynamic> data = result['data'] ?? [];
+
+  if (widget.dateRange == "completed") {
+    // Completed tab → keep only COMPLETED tasks
+    data = data.where((json) {
+      final status = json['status']?.toString().toLowerCase() ?? '';
+      return status == 'completed';
+    }).toList();
+
+    // Lowercase status so TaskCard renders it correctly
+    data = data.map((json) {
+      final updated = Map<String, dynamic>.from(json);
+      if (updated['status'] != null) {
+        updated['status'] = updated['status'].toString().toLowerCase();
+      }
+      return updated;
+    }).toList();
+  } else {
+    // Today / Tomorrow / Week / All → exclude COMPLETED tasks
+    data = data.where((json) {
+      final status = json['status']?.toString().toLowerCase() ?? '';
+      return status != 'completed';
+    }).toList();
+  }
+
+  setState(() {
+    _tasks = data;
+    _isLoading = false;
+  });
+} else {
       setState(() {
         _error = result['message'];
         _isLoading = false;

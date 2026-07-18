@@ -30,22 +30,28 @@ class _HomeScreenState extends State<HomeScreen> {
     'TOMORROW',
     'WEEK',
     'ALL',
+    'COMPLETED',
   ];
 
   String get _emptyTitle {
-    if (_currentTabIndex == 3) {
-      print("This is pressed");
-      return "Life's a breeze";
-    }
-    return "No assigned tasks for ${_tabLabels[_currentTabIndex].toLowerCase()}.";
+  if (_currentTabIndex == 3) {
+    return "Life's a Runsys";
   }
+  if (_currentTabIndex == 4) {
+    return "No completed tasks yet.";
+  }
+  return "No assigned tasks for ${_tabLabels[_currentTabIndex].toLowerCase()}.";
+}
 
   String? get _emptySubtitle {
-    if (_currentTabIndex == 3) {
-      return "Your task list is empty. We'll notify you when you have new tasks.";
-    }
-    return "Try changing your dates to see your assigned tasks.";
+  if (_currentTabIndex == 3) {
+    return "Your task list is empty. We'll notify you when you have new tasks.";
   }
+  if (_currentTabIndex == 4) {
+    return "Tasks you finish will show up here.";
+  }
+  return "Try changing your dates to see your assigned tasks.";
+}
 
   Future<void> _openSortSheet() async {
     final result = await showModalBottomSheet<SortOption>(
@@ -258,23 +264,25 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-  Widget _buildTabBody() {
-    String dateRange;
-    switch (_currentTabIndex) {
-      case 0:  dateRange = "today";     break;
-      case 1:  dateRange = "tomorrow";  break;
-      case 2:  dateRange = "this_week"; break;
-      case 3:
-      default: dateRange = "all";       break;
-    }
-
-    return GenericTaskList(
-      dateRange: dateRange,
-      emptyTitle: _emptyTitle,
-      emptySubtitle: _emptySubtitle,
-      sortOption: _currentSort,           // ← Passing sort here
-      filterOption: _currentFilter,
-    );
+  
+Widget _buildTabBody() {
+  String dateRange;
+  switch (_currentTabIndex) {
+    case 0:  dateRange = "today";     break;
+    case 1:  dateRange = "tomorrow";  break;
+    case 2:  dateRange = "this_week"; break;
+    case 3:  dateRange = "all";       break;
+    case 4:
+    default: dateRange = "completed"; break;
   }
+
+  return GenericTaskList(
+    dateRange: dateRange,
+    emptyTitle: _emptyTitle,
+    emptySubtitle: _emptySubtitle,
+    sortOption: _currentSort,
+    filterOption: _currentFilter,
+  );
+}
 
 }
