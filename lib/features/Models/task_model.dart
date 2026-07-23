@@ -89,11 +89,12 @@ class TaskModel {
     );
   }
 
-  bool get isOverdue {
-    if (dueDate == null) return false;
-    return DateTime.tryParse(dueDate!)?.isBefore(DateTime.now()) ?? false;
-  }
-
+bool get isOverdue {
+  if (dueDate == null) return false;
+  final status = myAssignment.status.toLowerCase();      // ← add
+  if (status == 'completed') return false;               // ← add: completed tasks are never "overdue"
+  return DateTime.tryParse(dueDate!)?.isBefore(DateTime.now()) ?? false;
+}
   String get formattedDueDate {
     if (dueDate == null) return '';
     final dt = DateTime.tryParse(dueDate!);

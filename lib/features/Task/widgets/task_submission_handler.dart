@@ -172,7 +172,7 @@ class TaskSubmissionHandler {
             await onStopTimer();
             if (!context.mounted) return;
             Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (_) => const HomeScreen()),
+              MaterialPageRoute(builder: (_) => const HomeScreen(initialTabIndex: 4)),
               (route) => false,
             );
           } else {

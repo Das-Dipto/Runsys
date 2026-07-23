@@ -65,30 +65,36 @@ class _GenericTaskListState extends State<GenericTaskList> {
     );
 
     if (!mounted) return;
-
-    if (result['success'] == true) {
+if (result['success'] == true) {
   List<dynamic> data = result['data'] ?? [];
 
   if (widget.dateRange == "completed") {
-    // Completed tab → keep only COMPLETED tasks
+    // Keep only tasks whose ASSIGNMENT status is COMPLETED (case-insensitive)
     data = data.where((json) {
-      final status = json['status']?.toString().toLowerCase() ?? '';
-      return status == 'completed';
+      final assignmentStatus = json['my_assignment']?['status']?.toString().toLowerCase() ?? '';   // ← changed from json['status']
+      return assignmentStatus == 'completed';
     }).toList();
 
-    // Lowercase status so TaskCard renders it correctly
+    // Lowercase both status fields so TaskCard renders correctly
     data = data.map((json) {
       final updated = Map<String, dynamic>.from(json);
       if (updated['status'] != null) {
         updated['status'] = updated['status'].toString().toLowerCase();
       }
+      if (updated['my_assignment'] != null) {
+        final assignment = Map<String, dynamic>.from(updated['my_assignment']);
+        if (assignment['status'] != null) {
+          assignment['status'] = assignment['status'].toString().toLowerCase();
+        }
+        updated['my_assignment'] = assignment;   // ← added: lowercase nested my_assignment.status too
+      }
       return updated;
     }).toList();
   } else {
-    // Today / Tomorrow / Week / All → exclude COMPLETED tasks
+    // Today / Tomorrow / Week / All → exclude tasks whose ASSIGNMENT is COMPLETED
     data = data.where((json) {
-      final status = json['status']?.toString().toLowerCase() ?? '';
-      return status != 'completed';
+      final assignmentStatus = json['my_assignment']?['status']?.toString().toLowerCase() ?? '';   // ← changed from json['status']
+      return assignmentStatus != 'completed';
     }).toList();
   }
 
@@ -96,7 +102,9 @@ class _GenericTaskListState extends State<GenericTaskList> {
     _tasks = data;
     _isLoading = false;
   });
-} else {
+}
+
+else {
       setState(() {
         _error = result['message'];
         _isLoading = false;
@@ -174,17 +182,19 @@ class _GenericTaskListState extends State<GenericTaskList> {
                     ),
                   ),
                 ),
-              const SizedBox(height: 40),
-              Text(
-                widget.emptyTitle,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  height: 1.1,
+              if(widget.emptyTitle != "Life's a Running System")...[
+                const SizedBox(height: 40),
+                Text(
+                  widget.emptyTitle,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    height: 1.1,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
-                textAlign: TextAlign.center,
-              ),
+              ],
               const SizedBox(height: 12),
               if (widget.emptySubtitle != null)
                 Text(

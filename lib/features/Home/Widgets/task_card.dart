@@ -3,7 +3,7 @@ import 'task_detail_screen.dart'; // ✅ import detail screen
 
 // ── Data model ────────────────────────────────────────────────────────────────
 
-enum TaskStatus { overdue, newTask, inProgress }
+enum TaskStatus { overdue, newTask, inProgress, completed}
 enum TaskPriority { high, medium, low }
 enum OccupancyType { occupied, checkInOut, vacant }
 
@@ -129,12 +129,21 @@ class TaskCard extends StatelessWidget {
   static const Color _textSec    = Color(0xFF8A8A8A);
   static const Color _green      = Color(0xFF43A047);
   static const Color _orange     = Color(0xFFF57C00);
+   static const Color _completedBg = Color(0xFFF0FAF1); 
 
-  Color get _headerBg =>
+  Color get _headerBg {
       task.status == TaskStatus.overdue ? _overdueBg : _newBg;
+      if (task.status == TaskStatus.completed) return _completedBg;   // ← add
+        return _newBg;
+  }
 
-  Color get _headerTextColor =>
+  Color get _headerTextColor {
       task.status == TaskStatus.overdue ? _overdueRed : _textSec;
+      if (task.status == TaskStatus.completed) return _green;   // ← add
+        return _textSec;
+  }
+       // ← add: light green bg
+
 
   void _openDetail(BuildContext context) {
     Navigator.push(
@@ -155,7 +164,9 @@ class TaskCard extends StatelessWidget {
           border: Border.all(
             color: task.status == TaskStatus.overdue
                 ? _overdueRed.withOpacity(0.25)
-                : const Color(0xFFE8E8E8),
+                : task.status == TaskStatus.completed        // ← add
+                    ? _green.withOpacity(0.25)                // ← add
+                    : const Color(0xFFE8E8E8),
             width: 1,
           ),
           boxShadow: [
@@ -222,6 +233,7 @@ class TaskCard extends StatelessWidget {
   Widget _buildHeader() {
     final bool isOverdue = task.status == TaskStatus.overdue;
     final bool isNew = task.status == TaskStatus.newTask;
+    final bool isCompleted = task.status == TaskStatus.completed;   // ← add
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
@@ -231,6 +243,10 @@ class TaskCard extends StatelessWidget {
           if (isOverdue) ...[
             Icon(Icons.warning_amber_rounded, size: 16, color: _overdueRed),
             const SizedBox(width: 6),
+          ],
+          if (isCompleted) ...[                                     // ← add
+           Icon(Icons.check_circle_rounded, size: 16, color: _green),
+           const SizedBox(width: 6),
           ],
           Text(
             task.time,
@@ -251,6 +267,30 @@ class TaskCard extends StatelessWidget {
                 letterSpacing: 0.8,
               ),
             )
+               else if (isCompleted)                                     // ← add this whole branch
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+              color: _green.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.check_rounded, size: 12, color: _green),
+                const SizedBox(width: 5),
+                Text(
+                  'COMPLETED',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
+                    color: _green,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ],
+            ),
+          )
           else if (isNew)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),

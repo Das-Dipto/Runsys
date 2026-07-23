@@ -87,7 +87,11 @@ const List<String> _headers = [
 double get _tableWidth => _colWidths.fold(0.0, (double a, double b) => a + b) + 32.0;
 
 class AdminTaskTable extends StatefulWidget {
-  const AdminTaskTable({super.key});
+ final DateTime? fromDate;
+  final DateTime? toDate;
+  final List<String>? statuses;
+
+  const AdminTaskTable({super.key, this.fromDate, this.toDate, this.statuses});
 
   @override
   State<AdminTaskTable> createState() => _AdminTaskTableState();
@@ -100,22 +104,36 @@ class _AdminTaskTableState extends State<AdminTaskTable> {
   String? _errorMessage;
   List<TaskRow> _tasks = [];   // ← Fixed
 
+  int _currentPage = 1;
+int _totalPages = 1;
+
   @override
   void initState() {
     super.initState();
     _fetchTasks();
   }
 
-  Future<void> _fetchTasks() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  @override
+void didUpdateWidget(covariant AdminTaskTable oldWidget) {
+  super.didUpdateWidget(oldWidget);
+  if (oldWidget.fromDate != widget.fromDate ||
+      oldWidget.toDate != widget.toDate ||
+      oldWidget.statuses != widget.statuses) {
+    _fetchTasks();
+  }
+}
 
-    final result = await ApiController.getAllTasks();
+  Future<void> _fetchTasks({int? page}) async {
+  setState(() {
+    _isLoading = true;
+    _errorMessage = null;
+  });
 
-    if (result['success'] == true) {
-      final List<dynamic> apiData = result['data'];
+  final result = await ApiController.getAllTasks(page: page ?? _currentPage);
+
+  if (result['success'] == true) {
+    final List<dynamic> apiData = result['data'];
+    final meta = result['meta'];
 
       final List<TaskRow> mappedTasks = apiData.map((item) {
         final dueDateTime = item['due_date'] != null 
@@ -159,17 +177,24 @@ class _AdminTaskTableState extends State<AdminTaskTable> {
         );
       }).toList();
 
-      setState(() {
-        _tasks = mappedTasks;
-        _isLoading = false;
-      });
-    } else {
-      setState(() {
-        _errorMessage = result['message'] ?? 'Failed to load tasks';
-        _isLoading = false;
-      });
-    }
+     setState(() {
+      _tasks = mappedTasks;
+      _isLoading = false;
+      _currentPage = meta?['current_page'] ?? (page ?? _currentPage);
+      _totalPages = meta?['total_pages'] ?? 1;
+    });
+  } else {
+    setState(() {
+      _errorMessage = result['message'] ?? 'Failed to load tasks';
+      _isLoading = false;
+    });
   }
+}
+
+void _goToPage(int page) {
+  if (page < 1 || page > _totalPages || page == _currentPage) return;
+  _fetchTasks(page: page);
+}
 
   @override
   void dispose() {
@@ -200,31 +225,90 @@ class _AdminTaskTableState extends State<AdminTaskTable> {
       return const Center(child: Text('No tasks available'));
     }
 
-    return Scrollbar(
-      controller: _hScroll,
-      thumbVisibility: true,
-      trackVisibility: true,
-      child: SingleChildScrollView(
-        controller: _hScroll,
-        scrollDirection: Axis.horizontal,
-        child: SizedBox(
-          width: _tableWidth,
-          child: Column(
-            children: [
-              _buildHeader(),
-              Expanded(
-                child: ListView.builder(
-                  padding: EdgeInsets.zero,
-                  itemCount: _tasks.length,
-                  itemBuilder: (context, index) => _buildRow(_tasks[index], index),
+return Scrollbar(
+  controller: _hScroll,
+  thumbVisibility: true,
+  trackVisibility: true,
+  child: Column(
+    children: [
+      Expanded(
+        child: SingleChildScrollView(
+          controller: _hScroll,
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(
+            width: _tableWidth,
+            child: Column(
+              children: [
+                _buildHeader(),
+                SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.6, // adjust as needed
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: _tasks.length,
+                    itemBuilder: (context, index) => _buildRow(_tasks[index], index),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    );
+      _buildPaginationBar(),
+    ],
+  ),
+);
   }
+
+  Widget _buildPaginationBar() {
+  if (_totalPages <= 1) return const SizedBox.shrink();
+
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+    decoration: const BoxDecoration(
+      color: Color(0xFF16161F),
+      border: Border(top: BorderSide(color: Color(0xFF1E1E2E))),
+    ),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.chevron_left_rounded, color: Color(0xFF8A8A9A)),
+          onPressed: _currentPage > 1 ? () => _goToPage(_currentPage - 1) : null,
+        ),
+        ...List.generate(_totalPages, (i) {
+          final pageNum = i + 1;
+          final isActive = pageNum == _currentPage;
+          return GestureDetector(
+            onTap: () => _goToPage(pageNum),
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: isActive ? const Color(0xFFFF7300) : Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isActive ? const Color(0xFFFF7300) : const Color(0xFF1E1E2E),
+                ),
+              ),
+              child: Text(
+                '$pageNum',
+                style: TextStyle(
+                  color: isActive ? Colors.white : const Color(0xFF8A8A9A),
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          );
+        }),
+        IconButton(
+          icon: const Icon(Icons.chevron_right_rounded, color: Color(0xFF8A8A9A)),
+          onPressed: _currentPage < _totalPages ? () => _goToPage(_currentPage + 1) : null,
+        ),
+      ],
+    ),
+  );
+}
 
   // ── Header ───────────────────────────────────────────────────────────────────
   Widget _buildHeader() {

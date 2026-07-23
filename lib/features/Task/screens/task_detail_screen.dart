@@ -35,6 +35,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   bool _showRequirements = false;
 
+  final Set<String> _savedItemIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -59,11 +61,17 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     if (!mounted) return;
 
     if (result['success'] == true) {
-      final data = result['data'];
-      setState(() {
-        _detail = data;
-        _isLoading = false;
-      });
+        final data = result['data'];
+  final existingAnswers = (data['existing_responses']?['answers'] as Map?)
+          ?.cast<String, dynamic>() ??
+      {};
+  setState(() {
+    _detail = data;
+    _isLoading = false;
+    _savedItemIds
+      ..clear()
+      ..addAll(existingAnswers.keys);   // ← items already saved from before
+  });
 
       final isActive = data['is_timer_active'] == true;
       final activeLog = data['active_time_log'];
@@ -271,11 +279,15 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     return '$h:$m $ap';
   }
 
-  bool get _isOverdue {
-    final due = _detail?['due_date'] ?? widget.task.dueDate;
-    if (due == null) return false;
-    return DateTime.tryParse(due)?.isBefore(DateTime.now()) ?? false;
-  }
+bool get _isOverdue {
+  if (_isCompleted) return false;   // ← add this line
+
+  final due = _detail?['due_date'] ?? widget.task.dueDate;
+  if (due == null) return false;
+  return DateTime.tryParse(due)?.isBefore(DateTime.now()) ?? false;
+}
+
+
 
   int _countFilledItems() {
     int count = 0;
@@ -295,6 +307,22 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
     return count;
   }
+
+  bool _allRequirementsSaved(List sections) {
+  final total = sections.fold<int>(
+      0, (sum, s) => sum + ((s['items'] as List?)?.length ?? 0));
+  if (total == 0) return false;
+  return _savedItemIds.length >= total;
+}
+
+bool get _isCompleted {
+  final status = (_detail?['my_assignment']?['assignment_status'] ??
+          _detail?['status'] ??
+          widget.task.myAssignment.status)
+      .toString()
+      .toLowerCase();
+  return status == 'completed';
+}
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
@@ -373,13 +401,15 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         _buildSectionHeader('Requirements'),
         const SizedBox(height: 14),
         TaskRequirementsSection(
-          detail: _detail!,
-          submission: _submission,
-          taskId: widget.task.id,
-          existingAnswers: (_detail!['existing_responses']?['answers'] as Map?)
-                  ?.cast<String, dynamic>() ??
-              {},
-          onChanged: () => setState(() {}),
+         detail: _detail!,
+  submission: _submission,
+  taskId: widget.task.id,
+  existingAnswers: (_detail!['existing_responses']?['answers'] as Map?)
+          ?.cast<String, dynamic>() ??
+      {},
+  onChanged: () => setState(() {}),
+  onItemSaved: (id) => setState(() => _savedItemIds.add(id)),     // ← add
+  onItemEdited: (id) => setState(() => _savedItemIds.remove(id)), // ← add
         ),
         const SizedBox(height: 32),
       ],
@@ -387,39 +417,45 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   ),
 ],
 
+
+
                         if (sections.isNotEmpty && _isTimerRunning && _showRequirements) ...[
                           SizedBox(
                             width: double.infinity,
                             height: 52,
                             child: ElevatedButton.icon(
-                              onPressed: () {
-                                _submission.showConfirmAndSubmit(
-                                  context: context,
-                                  taskId: widget.task.id,
-                                  timeLogId: _currentLogId,
-                                  sections: sections,
-                                  onSuccess: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: const Text(
-                                          'Task submitted successfully!',
-                                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                                        ),
-                                        backgroundColor: const Color(0xFF43A047),
-                                        behavior: SnackBarBehavior.floating,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                      ),
-                                    );
-                                  },
-                                  onStopTimer: _onStopPressed,
-                                );
-                              },
+                              onPressed: _allRequirementsSaved(sections)
+                                  ? () {
+                                      _submission.showConfirmAndSubmit(
+                                        context: context,
+                                        taskId: widget.task.id,
+                                        timeLogId: _currentLogId,
+                                        sections: sections,
+                                        onSuccess:  () {
+                                                            ScaffoldMessenger.of(context).showSnackBar(
+                                                              SnackBar(
+                                                                content: const Text(
+                                                                  'Task submitted successfully!',
+                                                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                                                ),
+                                                                backgroundColor: const Color(0xFF43A047),
+                                                                behavior: SnackBarBehavior.floating,
+                                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                              ),
+                                                            );
+                                                          },   // unchanged
+                                        onStopTimer: _onStopPressed,
+                                      );
+                                    }
+                                  : null,     // ← disabled until every item is saved
                               icon: const Icon(Icons.assignment_turned_in_rounded, size: 22),
                               label: const Text('Submit Requirements',
                                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF43A047),
                                 foregroundColor: Colors.white,
+                                disabledBackgroundColor: const Color(0xFF43A047).withOpacity(0.35), // ← add
+                                disabledForegroundColor: Colors.white60,                            // ← add
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               ),
@@ -558,40 +594,63 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
+
+
+
+
   // ── Status strip ──────────────────────────────────────────────────────────
-  Widget _buildStatusStrip() {
-    final status = _detail!['my_assignment']?['assignment_status'] ?? widget.task.myAssignment.status;
-    final isOverdue = _isOverdue;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: BoxDecoration(
-        color: isOverdue ? const Color(0xFF2A1A1A) : const Color(0xFF16161F),
-        border: const Border(bottom: BorderSide(color: Color(0xFF1E1E2E), width: 1)),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            isOverdue ? Icons.warning_amber_rounded : Icons.assignment_outlined,
-            size: 19,
-            color: isOverdue ? const Color(0xFFFF6B6B) : const Color(0xFF8A8A9A),
+Widget _buildStatusStrip() {
+  final status = _detail!['my_assignment']?['assignment_status'] ?? widget.task.myAssignment.status;
+  final isOverdue = _isOverdue;
+  final isCompleted = _isCompleted;   // ← add
+
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+    decoration: BoxDecoration(
+      color: isOverdue
+          ? const Color(0xFF2A1A1A)
+          : isCompleted                                   // ← add
+              ? const Color(0xFF16281C)                    // ← add: dark green tint
+              : const Color(0xFF16161F),
+      border: const Border(bottom: BorderSide(color: Color(0xFF1E1E2E), width: 1)),
+    ),
+    child: Row(
+      children: [
+        Icon(
+          isOverdue
+              ? Icons.warning_amber_rounded
+              : isCompleted                                // ← add
+                  ? Icons.check_circle_rounded              // ← add
+                  : Icons.assignment_outlined,
+          size: 19,
+          color: isOverdue
+              ? const Color(0xFFFF6B6B)
+              : isCompleted                                 // ← add
+                  ? const Color(0xFF43A047)                  // ← add
+                  : const Color(0xFF8A8A9A),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          isOverdue ? 'OVERDUE · $status' : status,
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w700,
+            color: isOverdue
+                ? const Color(0xFFFF6B6B)
+                : isCompleted                                // ← add
+                    ? const Color(0xFF43A047)                  // ← add
+                    : Colors.white,
+            letterSpacing: 0.6,
           ),
-          const SizedBox(width: 10),
-          Text(
-            isOverdue ? 'OVERDUE · $status' : status,
-            style: TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w700,
-              color: isOverdue ? const Color(0xFFFF6B6B) : Colors.white,
-              letterSpacing: 0.6,
-            ),
-          ),
-          const Spacer(),
-          if (_detail!['watch_task'] == 1)
-            const Icon(Icons.visibility_outlined, size: 19, color: Color(0xFF8A8A9A)),
-        ],
-      ),
-    );
-  }
+        ),
+        const Spacer(),
+        if (_detail!['watch_task'] == 1)
+          const Icon(Icons.visibility_outlined, size: 19, color: Color(0xFF8A8A9A)),
+      ],
+    ),
+  );
+}
+
 
   // ── Task header ───────────────────────────────────────────────────────────
   Widget _buildTaskHeader() {
@@ -696,8 +755,31 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         _ActionTile(
           icon: Icons.rule_rounded,
           label: 'Requirements',
-          badge: '${_countFilledItems()}/$totalItems',
+          badge: _isCompleted ? '$totalItems/$totalItems' :'${_countFilledItems()}/$totalItems',
           onTap: () {
+             if (_isCompleted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Row(
+                    children: [
+                      Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'All requirements submitted',
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: const Color.fromARGB(255, 27, 180, 27),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              );
+              return;
+            }
+
             if (!_isTimerRunning) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -957,6 +1039,10 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   // ── Bottom bar ────────────────────────────────────────────────────────────
   Widget _buildBottomBar(BuildContext context) {
+    if (_isCompleted) {
+    return const SizedBox.shrink();   // ← no Start/Stop bar at all for completed tasks
+  }
+
     final bottomPad = MediaQuery.of(context).padding.bottom;
 
     return Container(

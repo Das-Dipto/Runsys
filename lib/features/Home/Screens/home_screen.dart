@@ -11,7 +11,8 @@ import '../../Task/widgets/generic_task_list.dart';
 import '../Widgets/filter_bottom_sheet.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final int initialTabIndex;
+  const HomeScreen({super.key, this.initialTabIndex = 0});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -35,7 +36,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String get _emptyTitle {
   if (_currentTabIndex == 3) {
-    return "Life's a Runsys";
+    return "Life's a Running System";
   }
   if (_currentTabIndex == 4) {
     return "No completed tasks yet.";
@@ -108,6 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _currentTabIndex = widget.initialTabIndex;
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,

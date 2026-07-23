@@ -57,6 +57,9 @@ class ApiController {
       print("This is data coming from API- ${data}");
 
       if (response.statusCode == 200 && data['success'] == true) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('token', data['token']);
+          await prefs.setInt('company_id', data['user']['company_id']);
         return {'success': true, 'data': data};
       } else {
         return {
@@ -113,7 +116,7 @@ class ApiController {
       final queryParams = <String, String>{};
 
       // Date Range
-      if (dateRange != null && dateRange != "all") {
+      if (dateRange != null && dateRange != "all" && dateRange != "completed") {
         queryParams['date_range'] = dateRange;
       }
 
@@ -134,7 +137,7 @@ class ApiController {
       }
 
       // Filter Option → priority
-      if (filterOption != null) {
+      if (filterOption != null && dateRange != "completed") {
         String priorityValue = '';
         switch (filterOption) {
           case FilterOption.high:
@@ -147,6 +150,10 @@ class ApiController {
         if (priorityValue.isNotEmpty) {
           queryParams['priority'] = priorityValue;
         }
+      }
+
+      if (dateRange == "completed") {                     // ← add this block
+        queryParams['status'] = 'COMPLETED';
       }
 
       final uri = Uri.parse('$_baseUrl/api/v1/app_task/my-tasks')
@@ -562,43 +569,49 @@ static Future<Map<String, dynamic>> submitTask({
   }
 }
 
-static Future<Map<String, dynamic>> getAllTasks() async {
+
+static Future<Map<String, dynamic>> getAllTasks({
+  int page = 1,
+  int limit = 20,
+  DateTime? fromDate,   // not sent yet — wired later
+  DateTime? toDate,     // not sent yet — wired later
+  String sortBy = 'due_date',
+  List<String> statuses = const ['PENDING', 'IN_PROGRESS'],
+}) async {
   try {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
+    final companyId = prefs.getInt('company_id') ?? 0;
 
-    final url = Uri.parse('$_baseUrl/api/v1/tasks?limit=5');
+    final queryParams = <String, String>{
+      'page': '$page',
+      'limit': '$limit',
+      'company_id': '$companyId',
+      'sortBy': sortBy,
+      if (statuses.isNotEmpty) 'status': statuses.join(','),
+    };
 
-    final response = await http.get(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+    final uri = Uri.parse('$_baseUrl/api/v1/tasks').replace(queryParameters: queryParams);
+    print("getAllTasks request URL: $uri");
+
+    final response = await http.get(uri, headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    });
 
     final data = jsonDecode(response.body);
 
     if (response.statusCode == 200 && data['success'] == true) {
-      return {
-        'success': true,
-        'data': data['data'] ?? [],
-        'meta': data['meta']
-      };
+      return {'success': true, 'data': data['data'] ?? [], 'meta': data['meta']};
     } else {
-      return {
-        'success': false,
-        'message': data['message'] ?? 'Failed to fetch tasks'
-      };
+      return {'success': false, 'message': data['message'] ?? 'Failed to fetch tasks'};
     }
   } catch (e) {
     print("getAllTasks error: $e");
-    return {
-      'success': false,
-      'message': 'Network error. Please check your connection.'
-    };
+    return {'success': false, 'message': 'Network error. Please check your connection.'};
   }
 }
+
 
 static Future<Map<String, dynamic>> getActiveProperties() async {
   try {

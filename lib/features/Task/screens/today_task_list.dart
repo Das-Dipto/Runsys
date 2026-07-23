@@ -340,15 +340,17 @@ class _TaskCardState extends State<TaskCard> {
       },
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: const Color(0xFF111118),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isOverdue
-                ? const Color(0xFFFF6B6B).withOpacity(0.3)
-                : const Color(0xFF1E1E2E),
-            width: 1,
-          ),
+       decoration: BoxDecoration(
+  color: const Color(0xFF111118),
+  borderRadius: BorderRadius.circular(16),
+  border: Border.all(
+    color: widget.task.myAssignment.status.toLowerCase() == 'completed'   // ← add
+        ? const Color(0xFF43A047).withOpacity(0.3)                        // ← add
+        : (isOverdue
+            ? const Color(0xFFFF6B6B).withOpacity(0.3)
+            : const Color(0xFF1E1E2E)),
+    width: 1,
+  ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.35),
@@ -420,62 +422,96 @@ class _TaskCardState extends State<TaskCard> {
     );
   }
 
-  Widget _buildHeader(bool isOverdue) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
-      color: isOverdue ? const Color(0xFF2A1A1A) : const Color(0xFF1E1E2E),
-      child: Row(
-        children: [
-          if (isOverdue) ...[
-            const Icon(Icons.warning_amber_rounded, size: 17, color: Color(0xFFFF6B6B)),
-            const SizedBox(width: 8),
-          ],
-          Text(
-            widget.task.dueTime ?? widget.task.formattedDueDate,
+
+Widget _buildHeader(bool isOverdue) {
+  final bool isCompleted = widget.task.myAssignment.status.toLowerCase() == 'completed';   // ← add
+
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+    color: isCompleted                                                                     // ← changed
+        ? const Color(0xFF16281C)
+        : (isOverdue ? const Color(0xFF2A1A1A) : const Color(0xFF1E1E2E)),
+    child: Row(
+      children: [
+        if (isCompleted) ...[                                                              // ← add
+          const Icon(Icons.check_circle_rounded, size: 17, color: Color(0xFF43A047)),
+          const SizedBox(width: 8),
+        ] else if (isOverdue) ...[
+          const Icon(Icons.warning_amber_rounded, size: 17, color: Color(0xFFFF6B6B)),
+          const SizedBox(width: 8),
+        ],
+        Text(
+          widget.task.dueTime ?? widget.task.formattedDueDate,
+          style: TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w600,
+            color: isCompleted                                                             // ← changed
+                ? const Color(0xFF43A047)
+                : (isOverdue ? const Color(0xFFFF6B6B) : const Color(0xFF8A8A9A)),
+          ),
+        ),
+        const Spacer(),
+        if (isCompleted)                                                                    // ← add whole branch
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF43A047).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.check_rounded, size: 12, color: Color(0xFF43A047)),
+                SizedBox(width: 6),
+                Text(
+                  'COMPLETED',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF43A047),
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else if (isOverdue)
+          const Text(
+            'OVERDUE',
             style: TextStyle(
-              fontSize: 13.5,
-              fontWeight: FontWeight.w600,
-              color: isOverdue ? const Color(0xFFFF6B6B) : const Color(0xFF8A8A9A),
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFFFF6B6B),
+              letterSpacing: 1.0,
+            ),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFF7300).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.calendar_today_rounded, size: 12, color: Color(0xFFFF7300)),
+                const SizedBox(width: 6),
+                Text(
+                  'Due ${widget.task.formattedDueDate}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFFFF7300),
+                  ),
+                ),
+              ],
             ),
           ),
-          const Spacer(),
-          if (isOverdue)
-            const Text(
-              'OVERDUE',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFFFF6B6B),
-                letterSpacing: 1.0,
-              ),
-            )
-          else
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFF7300).withOpacity(0.15),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.calendar_today_rounded, size: 12, color: Color(0xFFFF7300)),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Due ${widget.task.formattedDueDate}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFFFF7300),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
+      ],
+    ),
+  );
+}
 
   Widget _buildFooter() {
     final bool isWorking = widget.task.isTimerActive;

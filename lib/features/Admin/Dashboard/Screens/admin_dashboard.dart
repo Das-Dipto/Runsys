@@ -50,7 +50,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           children: [
             _buildTopBar(user?.fullName ?? 'Admin'),
             _buildSubBar(),
-            const Expanded(child: AdminTaskTable()),
+            Expanded(
+  child: AdminTaskTable(
+    fromDate: _selectedDateFilter?.from ?? DateTime.now(),
+    toDate: _selectedDateFilter?.to ?? DateTime.now().add(const Duration(days: 1)),
+    statuses: _selectedStatus == 'Active'
+        ? ['PENDING', 'IN_PROGRESS']
+        : null, // null/omit for "All Tasks"
+  ),
+),
           ],
         ),
       ),
