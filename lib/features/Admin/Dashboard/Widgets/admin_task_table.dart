@@ -131,9 +131,7 @@ void didUpdateWidget(covariant AdminTaskTable oldWidget) {
   }
 }
 
-Future<bool> _isMyTask(TaskRow task) async {
-   final myUserId = context.read<AuthProvider>().user?.id ?? 0;
-   print("This is myUserId- ${myUserId}");
+bool _isMyTask(TaskRow task, int myUserId) {
   final assignees = task.raw['assignee_details'] as List? ?? [];
   return assignees.any((a) => (a['id'] as num?)?.toInt() == myUserId);
 }
@@ -375,18 +373,19 @@ return Scrollbar(
 
     return GestureDetector(
 onTap: () async{
-    final isMine = await _isMyTask(task);
+   final myUserId = context.read<AuthProvider>().user?.id ?? 0;
+  final isMine = _isMyTask(task, myUserId);
 
-    print("This is the my task state- ${isMine}");
-
-    if (isMine) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => TaskDetailScreen(task: TaskModel.fromJson(task.raw)),
+  if (isMine) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TaskDetailScreen(
+          task: TaskModel.fromJson(task.raw, currentUserId: myUserId),
         ),
-      );
-    } else {
+      ),
+    );
+  } else {
       showDialog(
         context: context,
         builder: (context) => TaskDetailDialog(

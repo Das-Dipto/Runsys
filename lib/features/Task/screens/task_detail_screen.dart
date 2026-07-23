@@ -260,14 +260,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     }
   }
 
-  String _formatDate(String? iso) {
-    if (iso == null) return '—';
-    final dt = DateTime.tryParse(iso);
-    if (dt == null) return '—';
-    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    const days   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-    return '${days[dt.weekday - 1]}, ${months[dt.month - 1]} ${dt.day}, ${dt.year}';
-  }
+String _formatDate(String? iso) {
+  if (iso == null) return '—';
+  final dt = DateTime.tryParse(iso)?.toLocal();   // ← add .toLocal()
+  if (dt == null) return '—';
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const days   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  return '${days[dt.weekday - 1]}, ${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+}
 
   String _formatTime(String? iso) {
     if (iso == null) return '—';

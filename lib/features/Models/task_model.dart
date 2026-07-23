@@ -9,13 +9,13 @@ class MyAssignment {
     this.dueDate,
   });
 
-  factory MyAssignment.fromJson(Map<String, dynamic> json) {
-    return MyAssignment(
-      status: json['status'] ?? '',
-      assignedAt: json['assigned_at'] ?? '',
-      dueDate: json['due_date'],
-    );
-  }
+factory MyAssignment.fromJson(Map<String, dynamic>? json) {
+  return MyAssignment(
+    status: json?['status'] ?? json?['assignment_status'] ?? '',
+    assignedAt: json?['assigned_at'] ?? '',
+    dueDate: json?['due_date'] ?? json?['assignment_due_date'],
+  );
+}
 }
 
 class TaskModel {
@@ -64,30 +64,50 @@ class TaskModel {
     required this.isTimerActive
   });
 
-  factory TaskModel.fromJson(Map<String, dynamic> json) {
-    return TaskModel(
-      id: json['id'],
-      title: json['title'] ?? '',
-      description: json['description'] ?? '',
-      priority: json['priority'] ?? '',
-      status: json['status'],
-      dueDate: json['due_date'],
-      dueTime: json['due_time'],
-      estimatedTime: json['estimated_time'],
-      createdAt: json['created_at'] ?? '',
-      propertyId: json['property_id'],
-      propertyName: json['property_name'] ?? '',
-      propertyAddress: json['property_address'],
-      propertyCity: json['property_city'],
-      propertyState: json['property_state'],
-      departmentId: json['department_id'],
-      departmentName: json['department_name'] ?? '',
-      departmentColor: json['department_color'] ?? '#3b82f6',
-      commentsCount: json['comments_count'] ?? 0,
-      myAssignment: MyAssignment.fromJson(json['my_assignment']),
-      isTimerActive: json['time_tracking']?['is_active'] == true,
+
+factory TaskModel.fromJson(Map<String, dynamic> json, {int? currentUserId}) {
+  // Resolve my_assignment: prefer direct field, else derive from assignee_details
+  Map<String, dynamic>? myAssignmentJson = json['my_assignment'];
+
+  if (myAssignmentJson == null && json['assignee_details'] != null && currentUserId != null) {
+    final assignees = json['assignee_details'] as List;
+    final match = assignees.firstWhere(
+      (a) => (a['id'] as num?)?.toInt() == currentUserId,
+      orElse: () => null,
     );
+    if (match != null) {
+      myAssignmentJson = {
+        'status': match['assignment_status'],
+        'assigned_at': match['assigned_at'],
+        'due_date': match['assignment_due_date'],
+      };
+    }
   }
+
+  return TaskModel(
+    id: json['id'],
+    title: json['title'] ?? '',
+    description: json['description'] ?? '',
+    priority: json['priority'] ?? '',
+    status: json['status'],
+    dueDate: json['due_date'],
+    dueTime: json['due_time'],
+    estimatedTime: json['estimated_time'],
+    createdAt: json['created_at'] ?? '',
+    propertyId: json['property_id'],
+    propertyName: json['property_name'] ?? '',
+    propertyAddress: json['property_address'],
+    propertyCity: json['property_city'],
+    propertyState: json['property_state'],
+    departmentId: json['department_id'],
+    departmentName: json['department_name'] ?? '',
+    departmentColor: json['department_color'] ?? '#3b82f6',
+    commentsCount: json['comments_count'] ?? 0,
+    myAssignment: MyAssignment.fromJson(myAssignmentJson),
+    isTimerActive: json['time_tracking']?['is_active'] == true,
+  );
+}
+
 
 bool get isOverdue {
   if (dueDate == null) return false;
