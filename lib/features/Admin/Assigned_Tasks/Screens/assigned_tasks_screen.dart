@@ -138,6 +138,7 @@ Widget _buildSummaryRow() {
             ),
           ),
 
+
           const SizedBox(width: 10),
 
           // Filter icon

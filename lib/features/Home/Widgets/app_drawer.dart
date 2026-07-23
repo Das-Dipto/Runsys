@@ -5,6 +5,7 @@ import '../../Profile/Screens/profile_screen.dart';
 import '../../Home/Screens/home_screen.dart';
 import '../../History/Screens/history_screen.dart';
 import '../../Board/Screens/board_screen.dart';
+import '../../Admin/Dashboard/Screens/admin_dashboard.dart';
 
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
@@ -45,6 +46,8 @@ class _AppDrawerState extends State<AppDrawer> {
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context, listen: false).user;
+    final isAdmin = user?.roleId == 1 || user?.roleName.toLowerCase() == 'admin'; 
+
 
     return Drawer(
       backgroundColor: _surface,
@@ -168,6 +171,23 @@ onTap: () {
               );
             }),
 
+            
+            
+            if (isAdmin)
+  _DrawerItem(
+    icon: Icons.admin_panel_settings_rounded,
+    label: 'Admin Panel',
+    isActive: false,
+    onTap: () {
+      Navigator.pop(context);
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+        (route) => false, // clears user-mode stack, avoids nested drawers stacking
+      );
+    },
+  ),
+            
             const Divider(height: 1, thickness: 1, color: _border),
 
             const Spacer(),

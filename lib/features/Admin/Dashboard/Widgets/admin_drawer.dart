@@ -1,4 +1,5 @@
 import 'package:Runsys/features/Admin/Dashboard/Screens/admin_dashboard.dart';
+import 'package:Runsys/features/Home/Screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../Authentication/Providers/auth_providers.dart';
@@ -313,6 +314,19 @@ class AdminDrawer extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const AssignedTasksScreen()),
+                );
+              },
+            ),
+
+            _DrawerMenuItem(
+              icon: Icons.date_range_rounded,
+              label: 'My Tasks',
+              isActive: activeMenu == 'My Tasks',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const HomeScreen()),
                 );
               },
             ),

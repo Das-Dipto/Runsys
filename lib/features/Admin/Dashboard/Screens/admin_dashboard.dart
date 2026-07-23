@@ -5,6 +5,7 @@ import '../Widgets/admin_drawer.dart';
 import '../Widgets/admin_task_table.dart';
 import '../Widgets/date_ramge_dialog.dart';
 import '../Widgets/create_task_dialog.dart';
+import '../Widgets/task_search_dialog.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -24,6 +25,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   String _selectedStatus = 'Active';
   DateFilterResult? _selectedDateFilter;
+  String? _searchQuery;
 
   Future<void> _showDateRangeDialog() async {
     final result = await showDateFilterDialog(
@@ -36,6 +38,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       setState(() => _selectedDateFilter = result);
     }
   }
+
+  Future<void> _showSearchDialog() async {
+  final result = await showTaskSearchDialog(context);
+  if (result != null) {
+    setState(() => _searchQuery = result.trim().isEmpty ? null : result.trim());
+  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +61,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             _buildSubBar(),
             Expanded(
   child: AdminTaskTable(
+    searchQuery: _searchQuery,
     fromDate: _selectedDateFilter?.from ?? DateTime.now(),
     toDate: _selectedDateFilter?.to ?? DateTime.now().add(const Duration(days: 1)),
     statuses: _selectedStatus == 'Active'
@@ -148,6 +158,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
 
           const SizedBox(width: 8),
+
+          IconButton(
+            icon: const Icon(Icons.search_rounded, color: _textSec, size: 20),
+            onPressed: _showSearchDialog,
+            tooltip: 'Search Tasks',
+          ),
 
           IconButton(
             icon: const Icon(Icons.filter_alt_outlined,

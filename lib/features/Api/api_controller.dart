@@ -613,6 +613,39 @@ static Future<Map<String, dynamic>> getAllTasks({
 }
 
 
+static Future<Map<String, dynamic>> searchTasks(String query) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+    final companyId = prefs.getInt('company_id') ?? 0;
+
+    final queryParams = <String, String>{
+      'search': query.trim(),
+      'company_id': '$companyId',
+    };
+
+    final uri = Uri.parse('$_baseUrl/api/v1/tasks').replace(queryParameters: queryParams);
+    print("searchTasks request URL: $uri");
+
+    final response = await http.get(uri, headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    });
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {'success': true, 'data': data['data'] ?? [], 'meta': data['meta']};
+    } else {
+      return {'success': false, 'message': data['message'] ?? 'Search failed'};
+    }
+  } catch (e) {
+    print("searchTasks error: $e");
+    return {'success': false, 'message': 'Network error. Please check your connection.'};
+  }
+}
+
+
 static Future<Map<String, dynamic>> getActiveProperties() async {
   try {
     final prefs = await SharedPreferences.getInstance();

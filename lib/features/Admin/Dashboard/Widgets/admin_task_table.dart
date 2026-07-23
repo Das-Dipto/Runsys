@@ -1,7 +1,12 @@
 // admin_task_table.dart
+import 'package:Runsys/features/Authentication/Providers/auth_providers.dart';
 import 'package:flutter/material.dart';
 import '../../../Api/api_controller.dart'; 
 import './task_detail_dialog.dart';  
+import '../../../Models/task_model.dart';
+import '../../../Task/screens/task_detail_screen.dart';
+import 'package:provider/provider.dart';
+
 
 class TaskRow {
   final String task;
@@ -26,6 +31,7 @@ class TaskRow {
   final String dateCompleted;
   final String completedBy;
   final String dateUpdated;
+  final Map<String, dynamic> raw;   // ← add this
 
   const TaskRow({
     required this.task,
@@ -50,6 +56,7 @@ class TaskRow {
     required this.dateCompleted,
     required this.completedBy,
     required this.dateUpdated,
+    required this.raw,
   });
 }
 
@@ -87,11 +94,12 @@ const List<String> _headers = [
 double get _tableWidth => _colWidths.fold(0.0, (double a, double b) => a + b) + 32.0;
 
 class AdminTaskTable extends StatefulWidget {
+  final String? searchQuery;
  final DateTime? fromDate;
   final DateTime? toDate;
   final List<String>? statuses;
 
-  const AdminTaskTable({super.key, this.fromDate, this.toDate, this.statuses});
+  const AdminTaskTable({super.key, this.searchQuery, this.fromDate, this.toDate, this.statuses});
 
   @override
   State<AdminTaskTable> createState() => _AdminTaskTableState();
@@ -123,13 +131,22 @@ void didUpdateWidget(covariant AdminTaskTable oldWidget) {
   }
 }
 
+Future<bool> _isMyTask(TaskRow task) async {
+   final myUserId = context.read<AuthProvider>().user?.id ?? 0;
+   print("This is myUserId- ${myUserId}");
+  final assignees = task.raw['assignee_details'] as List? ?? [];
+  return assignees.any((a) => (a['id'] as num?)?.toInt() == myUserId);
+}
+
   Future<void> _fetchTasks({int? page}) async {
   setState(() {
     _isLoading = true;
     _errorMessage = null;
   });
 
-  final result = await ApiController.getAllTasks(page: page ?? _currentPage);
+    final result = (widget.searchQuery != null && widget.searchQuery!.isNotEmpty)
+      ? await ApiController.searchTasks(widget.searchQuery!)
+      : await ApiController.getAllTasks(page: page ?? _currentPage);
 
   if (result['success'] == true) {
     final List<dynamic> apiData = result['data'];
@@ -174,6 +191,7 @@ void didUpdateWidget(covariant AdminTaskTable oldWidget) {
           dateUpdated: item['updated_at'] != null
               ? DateTime.parse(item['updated_at']).toLocal().toString().split(' ')[0]
               : '',
+          raw: item as Map<String, dynamic>,   // ← add this
         );
       }).toList();
 
@@ -356,26 +374,39 @@ return Scrollbar(
         );
 
     return GestureDetector(
-onTap: () {
-  showDialog(
-    context: context,
-    builder: (context) => TaskDetailDialog(
-      title: task.task,
-      property: task.property,
-      propertyAddress: task.propertyAddress,
-      department: task.department,
-      subDepartment: task.subdepartment,
-      assignees: task.assignments,
-      dueDateLabel: task.dueDateLabel,
-      status: task.status,
-      priority: task.priority,
-      createdBy: task.createdBy,
-      createdDate: task.createdDate,
-      updatedDate: task.dateUpdated,
-      comments: task.comments,
-    ),
-  );
-},
+onTap: () async{
+    final isMine = await _isMyTask(task);
+
+    print("This is the my task state- ${isMine}");
+
+    if (isMine) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TaskDetailScreen(task: TaskModel.fromJson(task.raw)),
+        ),
+      );
+    } else {
+      showDialog(
+        context: context,
+        builder: (context) => TaskDetailDialog(
+          title: task.task,
+          property: task.property,
+          propertyAddress: task.propertyAddress,
+          department: task.department,
+          subDepartment: task.subdepartment,
+          assignees: task.assignments,
+          dueDateLabel: task.dueDateLabel,
+          status: task.status,
+          priority: task.priority,
+          createdBy: task.createdBy,
+          createdDate: task.createdDate,
+          updatedDate: task.dateUpdated,
+          comments: task.comments,
+        ),
+      );
+    }
+  },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
@@ -408,6 +439,12 @@ onTap: () {
         ),
       ),
     );
+  
+  
+  
+  
+  
+  
   }
 
   Widget _taskCell(TaskRow t) => Column(   // ← Fixed
