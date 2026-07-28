@@ -16,7 +16,7 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "app.runsys.runsys"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     signingConfigs {
@@ -41,7 +41,7 @@ android {
         applicationId = "app.runsys.runsys"
 
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 36
 
         versionCode = flutter.versionCode
         versionName = flutter.versionName
