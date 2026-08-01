@@ -76,6 +76,48 @@ class ApiController {
     }
   }
 
+static Future<Map<String, dynamic>> getAssignedTasks({
+  int page = 1,
+  int limit = 20,
+  String sortBy = 'assigned_at',
+  String sortOrder = 'DESC',
+  String? search,
+}) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+    final companyId = prefs.getInt('company_id') ?? 0;
+
+    final queryParams = <String, String>{
+      'page': '$page',
+      'limit': '$limit',
+      'company_id': '$companyId',
+      'sortBy': sortBy,
+      'sortOrder': sortOrder,
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+    };
+
+    final uri = Uri.parse('$_baseUrl/api/v1/tasks/assign_tasks')
+        .replace(queryParameters: queryParams);
+    print("getAssignedTasks request URL: $uri");
+
+    final response = await http.get(uri, headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    });
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {'success': true, 'data': data['data'] ?? [], 'meta': data['meta']};
+    } else {
+      return {'success': false, 'message': data['message'] ?? 'Failed to fetch assigned tasks'};
+    }
+  } catch (e) {
+    print("getAssignedTasks error: $e");
+    return {'success': false, 'message': 'Network error. Please check your connection.'};
+  }
+}
   static Future<Map<String, dynamic>> getMyTasks() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -645,16 +687,30 @@ static Future<Map<String, dynamic>> searchTasks(String query) async {
   }
 }
 
-
-static Future<Map<String, dynamic>> getActiveProperties() async {
+static Future<Map<String, dynamic>> getActiveProperties({
+  int page = 1,
+  int limit = 500,
+  String sortBy = 'name',
+  String sortOrder = 'ASC',
+}) async {
   try {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
+    final companyId = prefs.getInt('company_id') ?? 0;
 
-    final url = Uri.parse('$_baseUrl/api/v1/properties/active');
+    final queryParams = <String, String>{
+      'page': '$page',
+      'limit': '$limit',
+      'company_id': '$companyId',
+      'sortBy': sortBy,
+      'sortOrder': sortOrder,
+    };
+
+    final uri = Uri.parse('$_baseUrl/api/v1/properties/active')
+        .replace(queryParameters: queryParams);
 
     final response = await http.get(
-      url,
+      uri,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -667,6 +723,7 @@ static Future<Map<String, dynamic>> getActiveProperties() async {
       return {
         'success': true,
         'data': data['data'] ?? [],
+        'pagination': data['pagination'],
       };
     } else {
       return {

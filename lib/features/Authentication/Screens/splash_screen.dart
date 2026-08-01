@@ -262,7 +262,7 @@ class _SplashScreenState extends State<SplashScreen>
                                 ),
                               ),
                               TextSpan(
-                                text: 'sys',
+                                text: 'Sys',
                                 style: TextStyle(
                                   fontSize: 42,
                                   fontWeight: FontWeight.w800,

@@ -21,10 +21,10 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   // Dummy counts — replace with real data
-  final int _totalProperties    = 5;
-  final int _activeProperties   = 5;
-  final int _inactiveProperties = 0;
-  final int _withIssues         = 0;
+ int _totalProperties = 0;
+int _activeProperties = 0;
+int _inactiveProperties = 0;
+final int _withIssues = 0; // leave as-is unless API provides this
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +39,17 @@ class _PropertiesScreenState extends State<PropertiesScreen> {
             _buildTopBar(),
             _buildStatsSection(),
             _buildFilterBar(),
-             Expanded(child: PropertiesTable()),
+             Expanded(
+  child: PropertiesTable(
+    onCountsLoaded: (total, active, inactive) {
+      setState(() {
+        _totalProperties = total;
+        _activeProperties = active;
+        _inactiveProperties = inactive;
+      });
+    },
+  ),
+),
           ],
         ),
       ),

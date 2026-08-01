@@ -56,7 +56,8 @@ double get _tableWidth =>
     _colWidths.fold(0.0, (double a, double b) => a + b) + 32.0;
 
 class PropertiesTable extends StatefulWidget {
-  const PropertiesTable({super.key});
+  final void Function(int total, int active, int inactive)? onCountsLoaded;
+  const PropertiesTable({super.key, this.onCountsLoaded});
 
   @override
   State<PropertiesTable> createState() => _PropertiesTableState();
@@ -75,46 +76,52 @@ class _PropertiesTableState extends State<PropertiesTable> {
     _fetchProperties();
   }
 
-  Future<void> _fetchProperties() async {
+Future<void> _fetchProperties() async {
+  setState(() {
+    _isLoading = true;
+    _errorMessage = null;
+  });
+
+  final result = await ApiController.getActiveProperties();
+
+  if (result['success'] == true) {
+    final List<dynamic> apiData = result['data'];
+
+    final List<PropertyRow> mapped = apiData.map((item) {
+      return PropertyRow(
+        id: item['id'] ?? 0,
+        name: item['name'] ?? 'Untitled Property',
+        unitId: item['building'] != null ? '#${item['building']}' : '',
+        address: item['address'] ?? '',
+        addressSub: item['city'] != null ? '${item['city']}, ${item['state'] ?? ''}' : '',
+        tags: item['tags'] != null && item['tags'] is List
+            ? List<String>.from(item['tags'])
+            : [],
+        status: item['is_active'] == 'Y' ? 'Active' : 'Inactive',
+        hasIssues: (item['open_issues_count'] ?? 0) > 0,
+        lastClean: 'Never',
+        lastInspection: 'Never',
+      );
+    }).toList();
+
     setState(() {
-      _isLoading = true;
-      _errorMessage = null;
+      _properties = mapped;
+      _isLoading = false;
     });
 
-    final result = await ApiController.getActiveProperties();
+    // ✅ Report real counts back to the parent screen
+    final total = result['pagination']?['total'] ?? mapped.length;
+    final activeCount = mapped.where((p) => p.status == 'Active').length;
+    final inactiveCount = mapped.where((p) => p.status == 'Inactive').length;
 
-    if (result['success'] == true) {
-      final List<dynamic> apiData = result['data'];
-
-      final List<PropertyRow> mapped = apiData.map((item) {
-        return PropertyRow(
-          id: item['id'] ?? 0,
-          name: item['name'] ?? 'Untitled Property',
-          unitId: item['building'] != null ? '#${item['building']}' : '',
-          address: item['address'] ?? '',
-          addressSub: item['city'] != null ? '${item['city']}, ${item['state'] ?? ''}' : '',
-          tags: item['tags'] != null && item['tags'] is List
-              ? List<String>.from(item['tags'])
-              : [],
-          status: item['is_active'] == 'Y' ? 'Active' : 'Inactive',
-          hasIssues: (item['open_issues_count'] ?? 0) > 0,
-          lastClean: 'Never',
-          lastInspection: 'Never',
-        );
-      }).toList();
-
-      setState(() {
-        _properties = mapped;
-        _isLoading = false;
-      });
-    } else {
-      setState(() {
-        _errorMessage = result['message'] ?? 'Failed to load properties';
-        _isLoading = false;
-      });
-    }
+    widget.onCountsLoaded?.call(total, activeCount, inactiveCount);
+  } else {
+    setState(() {
+      _errorMessage = result['message'] ?? 'Failed to load properties';
+      _isLoading = false;
+    });
   }
-
+}
   @override
   void dispose() {
     _hScroll.dispose();

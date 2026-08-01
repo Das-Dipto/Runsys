@@ -100,6 +100,7 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
     ]);
   }
 
+
   Future<void> _fetchProperties() async {
     final res = await ApiController.getActiveProperties();
     if (res['success'] == true) {
@@ -111,6 +112,10 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
       setState(() => _loadingProps = false);
     }
   }
+
+
+
+
 
   Future<void> _fetchDepartments() async {
     final res = await ApiController.getTaskDepartments();

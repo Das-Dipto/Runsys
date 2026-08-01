@@ -410,6 +410,7 @@ bool get _isCompleted {
   onChanged: () => setState(() {}),
   onItemSaved: (id) => setState(() => _savedItemIds.add(id)),     // ← add
   onItemEdited: (id) => setState(() => _savedItemIds.remove(id)), // ← add
+  readOnly: _isCompleted,   // ← add this
         ),
         const SizedBox(height: 32),
       ],
@@ -758,26 +759,32 @@ Widget _buildStatusStrip() {
           badge: _isCompleted ? '$totalItems/$totalItems' :'${_countFilledItems()}/$totalItems',
           onTap: () {
              if (_isCompleted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Row(
-                    children: [
-                      Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'All requirements submitted',
-                          style: TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                    ],
-                  ),
-                  backgroundColor: const Color.fromARGB(255, 27, 180, 27),
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              );
-              return;
+              
+ setState(() => _showRequirements = !_showRequirements);   // ← was showing a snackbar + return
+      return;
+              // ScaffoldMessenger.of(context).showSnackBar(
+              //   SnackBar(
+              //     content: const Row(
+              //       children: [
+              //         Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
+              //         SizedBox(width: 10),
+              //         Expanded(
+              //           child: Text(
+              //             'All requirements submitted',
+              //             style: TextStyle(fontWeight: FontWeight.w500),
+              //           ),
+              //         ),
+              //       ],
+              //     ),
+              //     backgroundColor: const Color.fromARGB(255, 27, 180, 27),
+              //     behavior: SnackBarBehavior.floating,
+              //     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              //   ),
+              // );
+              // return;
+
+
+
             }
 
             if (!_isTimerRunning) {

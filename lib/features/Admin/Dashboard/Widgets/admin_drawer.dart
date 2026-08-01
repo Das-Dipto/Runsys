@@ -187,7 +187,7 @@ class AdminDrawer extends StatelessWidget {
                           ),
                         ),
                         TextSpan(
-                          text: 'sys',
+                          text: 'Sys',
                           style: TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w800,

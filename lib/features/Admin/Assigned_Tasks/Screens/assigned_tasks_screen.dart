@@ -1,4 +1,5 @@
 // lib/Admin/Screens/assigned_tasks_screen.dart
+import 'package:Runsys/features/Admin/Assigned_Tasks/Widgets/assigned_task_search_dialog.dart';
 import 'package:flutter/material.dart';
 import '../../Dashboard/Widgets/admin_drawer.dart';
 import '../Widgets/assigned_tasks_table.dart';
@@ -22,22 +23,40 @@ class _AssignedTasksScreenState extends State<AssignedTasksScreen> {
   String _selectedDateFilter = 'All Tasks';
 
   // Summary counts (dummy — replace with real data)
-  final int _totalTasks   = 20;
-  final int _pendingTasks = 14;
-  final int _completedTasks = 0;
+ int _totalTasks = 0;
+int _pendingTasks = 0;
+int _completedTasks = 0;
 
-  Future<void> _showDateFilterDialog() async {
-    final options = ['Today', 'This Week', 'This Month', 'Last Month', 'All Tasks'];
-    final result = await showDialog<String>(
-      context: context,
-      barrierColor: Colors.black.withOpacity(0.65),
-      builder: (ctx) => _DateQuickFilterDialog(
-        selected: _selectedDateFilter,
-        options: options,
-      ),
-    );
-    if (result != null) setState(() => _selectedDateFilter = result);
+String? _searchQuery;
+
+Future<void> _showSearchDialog() async {
+  final result = await showDialog<String>(
+    context: context,
+    barrierColor: Colors.black.withOpacity(0.65),
+    builder: (ctx) => const AssignedTaskSearchDialog(),
+  );
+  if (result != null) {
+    setState(() => _searchQuery = result.trim().isEmpty ? null : result.trim());
   }
+}
+
+ Future<void> _showDateFilterDialog() async {
+  final options = ['Today', 'This Week', 'This Month', 'Last Month', 'All Tasks'];
+  final result = await showDialog<String>(
+    context: context,
+    barrierColor: Colors.black.withOpacity(0.65),
+    builder: (ctx) => _DateQuickFilterDialog(
+      selected: _selectedDateFilter,
+      options: options,
+    ),
+  );
+  if (result != null) {
+    setState(() {
+      _selectedDateFilter = result;
+      if (result == 'All Tasks') _searchQuery = null; // reset search
+    });
+  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +70,18 @@ class _AssignedTasksScreenState extends State<AssignedTasksScreen> {
             _buildTopBar(),
             _buildSummaryRow(),
             _buildSubBar(),
-            const Expanded(child: AssignedTaskTable()),
+          Expanded(
+  child: AssignedTaskTable(
+    searchQuery: _searchQuery,
+    onCountsLoaded: (total, pending, completed) {
+      setState(() {
+        _totalTasks = total;
+        _pendingTasks = pending;
+        _completedTasks = completed;
+      });
+    },
+  ),
+),
           ],
         ),
       ),
@@ -102,55 +132,59 @@ Widget _buildSummaryRow() {
   );
 }
 
-  Widget _buildSubBar() {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: _bg,
-        border: Border(bottom: BorderSide(color: _border, width: 1)),
-      ),
-      child: Row(
-        children: [
-          // Date filter chip
-          GestureDetector(
-            onTap: _showDateFilterDialog,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: const Color(0x18FF7300),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _orange.withOpacity(0.35)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.calendar_today_outlined, color: _orange, size: 15),
-                  const SizedBox(width: 6),
-                  Text(
-                    _selectedDateFilter,
-                    style: const TextStyle(color: _orange, fontSize: 13, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.keyboard_arrow_down_rounded, color: _orange, size: 16),
-                ],
-              ),
+Widget _buildSubBar() {
+  return Container(
+    height: 52,
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    decoration: BoxDecoration(
+      color: _bg,
+      border: Border(bottom: BorderSide(color: _border, width: 1)),
+    ),
+    child: Row(
+      children: [
+        GestureDetector(
+          onTap: _showDateFilterDialog,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: const Color(0x18FF7300),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: _orange.withOpacity(0.35)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.calendar_today_outlined, color: _orange, size: 15),
+                const SizedBox(width: 6),
+                Text(
+                  _selectedDateFilter,
+                  style: const TextStyle(color: _orange, fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.keyboard_arrow_down_rounded, color: _orange, size: 16),
+              ],
             ),
           ),
+        ),
+        const SizedBox(width: 10),
 
+        // ── Search icon (new) ──
+        IconButton(
+          icon: const Icon(Icons.search_rounded, color: _textSec, size: 20),
+          onPressed: _showSearchDialog,
+          tooltip: 'Search Tasks',
+        ),
 
-          const SizedBox(width: 10),
+        IconButton(
+          icon: const Icon(Icons.filter_alt_outlined, color: _textSec, size: 20),
+          onPressed: () {},
+          tooltip: 'Filter',
+        ),
+      ],
+    ),
+  );
+}
 
-          // Filter icon
-          IconButton(
-            icon: const Icon(Icons.filter_alt_outlined, color: _textSec, size: 20),
-            onPressed: () {},
-            tooltip: 'Filter',
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ── Summary Card ──────────────────────────────────────────────────────────────

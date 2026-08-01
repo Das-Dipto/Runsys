@@ -254,18 +254,17 @@ return Scrollbar(
           child: SizedBox(
             width: _tableWidth,
             child: Column(
-              children: [
-                _buildHeader(),
-                SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.6, // adjust as needed
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    itemCount: _tasks.length,
-                    itemBuilder: (context, index) => _buildRow(_tasks[index], index),
-                  ),
-                ),
-              ],
-            ),
+  children: [
+    _buildHeader(),
+    Expanded(   // ✅ fills remaining space instead of guessing a height
+      child: ListView.builder(
+        padding: EdgeInsets.zero,
+        itemCount: _tasks.length,
+        itemBuilder: (context, index) => _buildRow(_tasks[index], index),
+      ),
+    ),
+  ],
+),
           ),
         ),
       ),
@@ -275,7 +274,7 @@ return Scrollbar(
 );
   }
 
-  Widget _buildPaginationBar() {
+Widget _buildPaginationBar() {
   if (_totalPages <= 1) return const SizedBox.shrink();
 
   return Container(
@@ -291,32 +290,40 @@ return Scrollbar(
           icon: const Icon(Icons.chevron_left_rounded, color: Color(0xFF8A8A9A)),
           onPressed: _currentPage > 1 ? () => _goToPage(_currentPage - 1) : null,
         ),
-        ...List.generate(_totalPages, (i) {
-          final pageNum = i + 1;
-          final isActive = pageNum == _currentPage;
-          return GestureDetector(
-            onTap: () => _goToPage(pageNum),
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: isActive ? const Color(0xFFFF7300) : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isActive ? const Color(0xFFFF7300) : const Color(0xFF1E1E2E),
-                ),
-              ),
-              child: Text(
-                '$pageNum',
-                style: TextStyle(
-                  color: isActive ? Colors.white : const Color(0xFF8A8A9A),
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
-                  fontSize: 12,
-                ),
-              ),
+        Flexible(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(_totalPages, (i) {
+                final pageNum = i + 1;
+                final isActive = pageNum == _currentPage;
+                return GestureDetector(
+                  onTap: () => _goToPage(pageNum),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isActive ? const Color(0xFFFF7300) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: isActive ? const Color(0xFFFF7300) : const Color(0xFF1E1E2E),
+                      ),
+                    ),
+                    child: Text(
+                      '$pageNum',
+                      style: TextStyle(
+                        color: isActive ? Colors.white : const Color(0xFF8A8A9A),
+                        fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                );
+              }),
             ),
-          );
-        }),
+          ),
+        ),
         IconButton(
           icon: const Icon(Icons.chevron_right_rounded, color: Color(0xFF8A8A9A)),
           onPressed: _currentPage < _totalPages ? () => _goToPage(_currentPage + 1) : null,
@@ -325,7 +332,6 @@ return Scrollbar(
     ),
   );
 }
-
   // ── Header ───────────────────────────────────────────────────────────────────
   Widget _buildHeader() {
     const style = TextStyle(
@@ -356,96 +362,101 @@ return Scrollbar(
     );
   }
 
-  // ── Row ───────────────────────────────────────────────────────────────────────
-  Widget _buildRow(TaskRow task, int index) {   // ← Fixed
-    final isEven = index % 2 == 0;
-    const grey12 = TextStyle(color: Color(0xFF8A8A9A), fontSize: 12);
-    const white12 = TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500);
+Widget _buildRow(TaskRow task, int index) {
+  final isEven = index % 2 == 0;
+  const grey12 = TextStyle(color: Color(0xFF8A8A9A), fontSize: 12);
+  const white12 = TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500);
 
-    Widget cell(int i, Widget child) => SizedBox(width: _colWidths[i], child: child);
+  Widget cell(int i, Widget child) => SizedBox(width: _colWidths[i], child: child);
+  Widget txt(String s, {TextStyle style = grey12}) => Text(
+        s,
+        style: style,
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1,
+      );
 
-    Widget txt(String s, {TextStyle style = grey12}) => Text(
-          s,
-          style: style,
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-        );
-
-    return GestureDetector(
-onTap: () async{
-   final myUserId = context.read<AuthProvider>().user?.id ?? 0;
+  // ✅ check ownership before building the row
+  final myUserId = context.read<AuthProvider>().user?.id ?? 0;
   final isMine = _isMyTask(task, myUserId);
 
-  if (isMine) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => TaskDetailScreen(
-          task: TaskModel.fromJson(task.raw, currentUserId: myUserId),
-        ),
-      ),
-    );
-  } else {
-      showDialog(
-        context: context,
-        builder: (context) => TaskDetailDialog(
-          title: task.task,
-          property: task.property,
-          propertyAddress: task.propertyAddress,
-          department: task.department,
-          subDepartment: task.subdepartment,
-          assignees: task.assignments,
-          dueDateLabel: task.dueDateLabel,
-          status: task.status,
-          priority: task.priority,
-          createdBy: task.createdBy,
-          createdDate: task.createdDate,
-          updatedDate: task.dateUpdated,
-          comments: task.comments,
-        ),
-      );
-    }
-  },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: isEven ? const Color(0xFF0A0A0F) : const Color(0xFF16161F).withOpacity(0.6),
-          border: const Border(bottom: BorderSide(color: Color(0xFF1E1E2E), width: 0.5)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            cell(0, _taskCell(task)),
-            cell(1, _propertyCell(task)),
-            cell(2, txt(task.department, style: white12)),
-            cell(3, txt(task.subdepartment)),
-            cell(4, _assignmentCell(task)),
-            cell(5, _dueDateCell(task)),
-            cell(6, txt('${task.issues} issues')),
-            cell(7, txt('${task.comments}')),
-            cell(8, _statusBadge(task.status)),
-            cell(9, txt(task.priority)),
-            cell(10, txt(task.cost)),
-            cell(11, txt(task.billTo)),
-            cell(12, txt(task.requestedBy)),
-            cell(13, txt(task.tags)),
-            cell(14, txt(task.createdDate)),
-            cell(15, txt(task.createdBy)),
-            cell(16, txt(task.dateCompleted)),
-            cell(17, txt(task.completedBy)),
-            cell(18, txt(task.dateUpdated)),
-          ],
-        ),
-      ),
-    );
-  
-  
-  
-  
-  
-  
-  }
-
+  return GestureDetector(
+    onTap: () async {
+      if (isMine) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => TaskDetailScreen(
+              task: TaskModel.fromJson(task.raw, currentUserId: myUserId),
+            ),
+          ),
+        );
+      } else {
+        showDialog(
+          context: context,
+          builder: (context) => TaskDetailDialog(
+            title: task.task,
+            property: task.property,
+            propertyAddress: task.propertyAddress,
+            department: task.department,
+            subDepartment: task.subdepartment,
+            assignees: task.assignments,
+            dueDateLabel: task.dueDateLabel,
+            status: task.status,
+            priority: task.priority,
+            createdBy: task.createdBy,
+            createdDate: task.createdDate,
+            updatedDate: task.dateUpdated,
+            comments: task.comments,
+          ),
+        );
+      }
+    },
+    child: 
+   Container(
+  padding: EdgeInsets.only(
+    left: isMine ? 13 : 16,   // ✅ compensate for the 3px border
+    right: 16,
+    top: 12,
+    bottom: 12,
+  ),
+  decoration: BoxDecoration(
+    color: isMine
+        ? const Color(0xFFFF7300).withOpacity(0.08)
+        : (isEven ? const Color(0xFF0A0A0F) : const Color(0xFF16161F).withOpacity(0.6)),
+    border: Border(
+      bottom: const BorderSide(color: Color(0xFF1E1E2E), width: 0.5),
+      left: isMine
+          ? const BorderSide(color: Color(0xFFFF7300), width: 3)
+          : BorderSide.none,
+    ),
+  ),
+  child: Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      cell(0, _taskCell(task)),
+      cell(1, _propertyCell(task)),
+      cell(2, txt(task.department, style: white12)),
+      cell(3, txt(task.subdepartment)),
+      cell(4, _assignmentCell(task)),
+      cell(5, _dueDateCell(task)),
+      cell(6, txt('${task.issues} issues')),
+      cell(7, txt('${task.comments}')),
+      cell(8, _statusBadge(task.status)),
+      cell(9, txt(task.priority)),
+      cell(10, txt(task.cost)),
+      cell(11, txt(task.billTo)),
+      cell(12, txt(task.requestedBy)),
+      cell(13, txt(task.tags)),
+      cell(14, txt(task.createdDate)),
+      cell(15, txt(task.createdBy)),
+      cell(16, txt(task.dateCompleted)),
+      cell(17, txt(task.completedBy)),
+      cell(18, txt(task.dateUpdated)),
+    ],
+  ),
+),
+  );
+}
   Widget _taskCell(TaskRow t) => Column(   // ← Fixed
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,

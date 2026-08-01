@@ -427,7 +427,7 @@ class _LoginScreenState extends State<LoginScreen>
                                       ),
                                     ),
                                     TextSpan(
-                                      text: 'sys',
+                                      text: 'Sys',
                                       style: TextStyle(
                                         fontSize: 36,
                                         fontWeight: FontWeight.w800,

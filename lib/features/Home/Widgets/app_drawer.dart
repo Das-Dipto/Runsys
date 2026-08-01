@@ -100,7 +100,7 @@ class _AppDrawerState extends State<AppDrawer> {
                               ),
                             ),
                             TextSpan(
-                              text: 'sys',
+                              text: 'Sys',
                               style: TextStyle(
                                 fontSize: 28,
                                 fontWeight: FontWeight.w800,

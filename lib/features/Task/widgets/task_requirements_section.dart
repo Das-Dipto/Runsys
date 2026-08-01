@@ -37,6 +37,7 @@ class TaskRequirementsSection extends StatefulWidget {
   /// Optional: fired when a previously-saved item becomes dirty again
   /// (user edited it after saving).
   final ValueChanged<String>? onItemEdited;
+  final bool readOnly;    
 
   const TaskRequirementsSection({
     super.key,
@@ -47,6 +48,7 @@ class TaskRequirementsSection extends StatefulWidget {
     this.existingAnswers = const {},
     this.onItemSaved,
     this.onItemEdited,
+    this.readOnly = false, 
   });
 
   @override
@@ -95,6 +97,7 @@ class _TaskRequirementsSectionState extends State<TaskRequirementsSection> {
                 onChanged: widget.onChanged,
                 onSaved: () => widget.onItemSaved?.call(itemId),
                 onEdited: () => widget.onItemEdited?.call(itemId),
+                readOnly: widget.readOnly,
               );
             }),
             const SizedBox(height: 16),
@@ -121,6 +124,7 @@ class _RequirementItemCard extends StatefulWidget {
   final VoidCallback onChanged;
   final VoidCallback onSaved;
   final VoidCallback onEdited;
+  final bool readOnly;      
 
   const _RequirementItemCard({
     super.key,
@@ -131,6 +135,7 @@ class _RequirementItemCard extends StatefulWidget {
     required this.onSaved,
     required this.onEdited,
     this.existingAnswer,
+    this.readOnly = false,
   });
 
   @override
@@ -153,6 +158,8 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
   String get _itemId => widget.item['id'].toString();
   String get _type => widget.item['type'] ?? '';
   bool get _imageMandatory => widget.item['image_mandatory'] == true;
+
+  bool get _readOnly => widget.readOnly;
 
   @override
   void initState() {
@@ -217,6 +224,7 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
 
   // ── Dirty tracking ────────────────────────────────────────────────────
   void _markDirty() {
+    if (_readOnly) return; 
     if (!_isDirty || _isSaved) {
       setState(() {
         _isDirty = true;
@@ -467,17 +475,17 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
                   label: 'Yes',
                   color: _green,
                   isSelected: widget.submission.yesNoAnswers[_itemId] == 'YES',
-                  onTap: () {
-                    setState(() => widget.submission.yesNoAnswers[_itemId] = 'YES');
-                    _markDirty();
-                  },
+                 onTap: _readOnly ? () {} : () {
+                  setState(() => widget.submission.yesNoAnswers[_itemId] = 'YES');
+                  _markDirty();
+                },
                 ),
                 const SizedBox(width: 10),
                 _SelectableYesNoBtn(
                   label: 'No',
                   color: _red,
                   isSelected: widget.submission.yesNoAnswers[_itemId] == 'NO',
-                  onTap: () {
+                  onTap: _readOnly ? () {} : () {
                     setState(() {
                       widget.submission.yesNoAnswers[_itemId] = 'NO';
                       widget.submission.imageFiles[_itemId]?.clear();
@@ -496,10 +504,10 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
               final optText = opt['text'] ?? '';
               final isSelected = widget.submission.checklistAnswers[_itemId] == optText;
               return GestureDetector(
-                onTap: () {
-                  setState(() => widget.submission.checklistAnswers[_itemId] = optText);
-                  _markDirty();
-                },
+               onTap: _readOnly ? null : () {
+  setState(() => widget.submission.checklistAnswers[_itemId] = optText);
+  _markDirty();
+},
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(
@@ -535,6 +543,7 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
               style: const TextStyle(fontSize: 14, color: Colors.white),
               onChanged: (_) => _markDirty(),
               decoration: _textInputDecoration('Enter report…'),
+              enabled: !_readOnly,
             ),
           ],
 
@@ -547,6 +556,7 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
               style: const TextStyle(fontSize: 14, color: Colors.white),
               onChanged: (_) => _markDirty(),
               decoration: _textInputDecoration('Enter text…'),
+              enabled: !_readOnly,
             ),
           ],
 
@@ -559,6 +569,7 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
               style: const TextStyle(fontSize: 14, color: Colors.white),
               onChanged: (_) => _markDirty(),
               decoration: _textInputDecoration('Describe condition…'),
+              enabled: !_readOnly,
             ),
           ],
 
@@ -570,6 +581,7 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
               style: const TextStyle(fontSize: 14, color: Colors.white),
               onChanged: (_) => _markDirty(),
               decoration: _textInputDecoration('Enter count…'),
+              enabled: !_readOnly,
             ),
           ],
 
@@ -630,12 +642,12 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
       children: List.generate(5, (index) {
         final star = index + 1;
         return GestureDetector(
-          onTap: () {
-            setState(() {
-              widget.submission.reportControllers[_itemId]?.text = star.toString();
-            });
-            _markDirty();
-          },
+         onTap: _readOnly ? null : () {
+  setState(() {
+    widget.submission.reportControllers[_itemId]?.text = star.toString();
+  });
+  _markDirty();
+},
           child: Padding(
             padding: const EdgeInsets.only(right: 6),
             child: Icon(
@@ -732,7 +744,9 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
                   Positioned(
                     top: 5,
                     right: 5,
-                    child: GestureDetector(
+                    child: _readOnly
+      ? const SizedBox.shrink()
+      : GestureDetector(
                       onTap: () => _removeUploadedImage(index),
                       child: Container(
                         padding: const EdgeInsets.all(3),
@@ -747,6 +761,7 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
           ),
           const SizedBox(height: 12),
         ],
+        if (!_readOnly)
         GestureDetector(
           onTap: _isUploadingImage ? null : _showImageSourceDialog,
           child: Container(
