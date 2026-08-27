@@ -357,7 +357,7 @@ class _SplashScreenState extends State<SplashScreen>
                     color: orange.withOpacity(0.06),
                   ),
                   child: Text(
-                    'v 1.0.0',
+                    'v 1.0.4',
                     style: TextStyle(
                       fontSize: 11,
                       color: orange.withOpacity(0.55),

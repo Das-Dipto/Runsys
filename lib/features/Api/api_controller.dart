@@ -9,6 +9,40 @@ import '../Home/Widgets/filter_bottom_sheet.dart';
 class ApiController {
   static const String _baseUrl = 'https://runsysapi.runsys.app';
 
+  // ── Client-side save rate limiter (prevents hammering the backend's own limiter) ──
+  static const int _maxSaveCalls = 5;
+  static const Duration _saveWindow = Duration(seconds: 4);
+  static const Duration _saveCooldown = Duration(seconds: 20);
+
+  static final List<DateTime> _saveTimestamps = [];
+  static DateTime? _saveCooldownUntil;
+
+  /// Returns null if a save call is allowed right now, otherwise returns
+  /// how much longer to wait.
+  static Duration? _checkSaveRateLimit() {
+    final now = DateTime.now();
+
+    if (_saveCooldownUntil != null) {
+      if (now.isBefore(_saveCooldownUntil!)) {
+        return _saveCooldownUntil!.difference(now);
+      }
+      // cooldown expired, reset
+      _saveCooldownUntil = null;
+      _saveTimestamps.clear();
+    }
+
+    _saveTimestamps.removeWhere((t) => now.difference(t) > _saveWindow);
+
+    if (_saveTimestamps.length >= _maxSaveCalls) {
+      _saveCooldownUntil = now.add(_saveCooldown);
+      _saveTimestamps.clear();
+      return _saveCooldown;
+    }
+
+    _saveTimestamps.add(now);
+    return null;
+  }
+
   static Future<Map<String, String>> _getDeviceInfo() async {
     final deviceInfo = DeviceInfoPlugin();
 
@@ -52,9 +86,20 @@ class ApiController {
         }),
       );
 
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
       final data = jsonDecode(response.body);
 
       print("This is data coming from API- ${data}");
+
+
 
       if (response.statusCode == 200 && data['success'] == true) {
           final prefs = await SharedPreferences.getInstance();
@@ -106,7 +151,18 @@ static Future<Map<String, dynamic>> getAssignedTasks({
       'Authorization': 'Bearer $token',
     });
 
+             // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
     final data = jsonDecode(response.body);
+
+
 
     if (response.statusCode == 200 && data['success'] == true) {
       return {'success': true, 'data': data['data'] ?? [], 'meta': data['meta']};
@@ -132,7 +188,18 @@ static Future<Map<String, dynamic>> getAssignedTasks({
         },
       );
 
+
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
       final data = jsonDecode(response.body);
+
       print("This is getMyTasks Data- ${data}");
       if (response.statusCode == 200 && data['success'] == true) {
         return {'success': true, 'data': data['data']};
@@ -211,9 +278,19 @@ static Future<Map<String, dynamic>> getAssignedTasks({
         },
       );
 
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
       final data = jsonDecode(response.body);
 
       print("This is the data arrived- $data");
+
 
       if (response.statusCode == 200 && data['success'] == true) {
         return {'success': true, 'data': data['data'] ?? []};
@@ -246,7 +323,19 @@ static Future<Map<String, dynamic>> getAssignedTasks({
       },
     );
 
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
     final data = jsonDecode(response.body);
+
+
+
     if (response.statusCode == 200 && data['success'] == true) {
       return {'success': true, 'data': data['data']};
     } else {
@@ -271,7 +360,17 @@ static Future<Map<String, dynamic>> getAssignedTasks({
       },
     );
 
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
     final data = jsonDecode(response.body);
+
     if (response.statusCode == 200 && data['success'] == true) {
       return {'success': true, 'data': data['data']};
     } else {
@@ -297,7 +396,19 @@ static Future<Map<String, dynamic>> getProfile() async {
       },
     );
 
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
     final data = jsonDecode(response.body);
+
+
+
     if (response.statusCode == 200 && data['success'] == true) {
       return {'success': true, 'data': data['user']};
     } else {
@@ -332,6 +443,15 @@ static Future<Map<String, dynamic>> updateProfile({
         if (notes != null) 'notes': notes,
       }),
     );
+
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
 
     final data = jsonDecode(response.body);
     print('updateProfile response- $data');
@@ -370,6 +490,15 @@ static Future<Map<String, dynamic>> updateProfile({
           "confirmPassword": newPassword.toString()
         }),
       );
+
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
 
       final data = jsonDecode(response.body);
 
@@ -413,6 +542,15 @@ static Future<Map<String, dynamic>> updateProfile({
         }),
       );
 
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
       final data = jsonDecode(response.body);
 
       print("This is data coming from API- ${data}");
@@ -448,8 +586,19 @@ static Future<Map<String, dynamic>> updateProfile({
       body: jsonEncode({'task_id': taskId}),
     );
 
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
     final data = jsonDecode(response.body);
     print("startTimeLog response- $data  and TaskId- $taskId");
+
+
 
     if (response.statusCode == 200 || response.statusCode == 201) {
       print("This is startTimeLogData- ${data}");
@@ -480,8 +629,19 @@ static Future<Map<String, dynamic>> logout() async {
       }),
     );
 
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
+
     final data = jsonDecode(response.body);
     print('logout response- $data');
+
 
     if (response.statusCode == 200) {
       return {'success': true};
@@ -510,8 +670,19 @@ static Future<Map<String, dynamic>> stopTimeLog(int logId) async {
       },
     );
 
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
     final data = jsonDecode(response.body);
     print("stopTimeLog response- $data");
+
+
 
     if (response.statusCode == 200 && data['success'] == true) {
       return {'success': true, 'data': data['data']};
@@ -527,6 +698,18 @@ static Future<Map<String, dynamic>> submitItemResponse({
   required int taskId,
   required List<Map<String, dynamic>> items,
 }) async {
+  // ── Client-side rate limit guard ──
+  final wait = _checkSaveRateLimit();
+  if (wait != null) {
+    final seconds = wait.inSeconds;
+    print("⏳ Save blocked client-side, wait ${seconds}s");
+    return {
+      'success': false,
+      // 'message': 'Too many quick saves. Please wait ${seconds}s and try again.',
+      'message': 'Too many requests from this IP, please try again after 5 minutes',
+    };
+  }
+
   print("🔥 submitItemResponse CALLED with taskId: $taskId");
   print("Items: ${jsonEncode(items)}");
 
@@ -552,7 +735,33 @@ static Future<Map<String, dynamic>> submitItemResponse({
     );
 
     print("📨 Status Code: ${response.statusCode}");
-    final data = jsonDecode(response.body);
+
+    // ── Handle 429 BEFORE attempting jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit: ${response.body}");
+      // Sync our client cooldown to a safe backoff so we stop hammering
+      // the backend while it's still blocking this IP.
+      _saveCooldownUntil = DateTime.now().add(const Duration(minutes: 2));
+      _saveTimestamps.clear();
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP. Please wait and try after 5 minutes',
+      };
+    }
+
+    // ── Defensive parse: don't let a non-JSON body (HTML error page, etc.)
+    // crash into the generic "Network error" message ──
+    Map<String, dynamic> data;
+    try {
+      data = jsonDecode(response.body);
+    } catch (_) {
+      print("⚠️ Non-JSON response body: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Unexpected server response (${response.statusCode}). Please try again.',
+      };
+    }
+
     print('✅ submitItemResponse response- $data');
 
     if (response.statusCode == 200 && data['success'] == true) {
@@ -572,6 +781,10 @@ static Future<Map<String, dynamic>> submitItemResponse({
     };
   }
 }
+
+
+
+
 static Future<Map<String, dynamic>> submitTask({
   required int taskId,
   required List<Map<String, dynamic>> responses,
@@ -597,6 +810,15 @@ static Future<Map<String, dynamic>> submitTask({
         'comment': comment,
       }),
     );
+
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
 
     final data = jsonDecode(response.body);
     print('submitTask response- $data');
@@ -641,6 +863,15 @@ static Future<Map<String, dynamic>> getAllTasks({
       'Authorization': 'Bearer $token',
     });
 
+         // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
     final data = jsonDecode(response.body);
 
     if (response.statusCode == 200 && data['success'] == true) {
@@ -673,6 +904,15 @@ static Future<Map<String, dynamic>> searchTasks(String query) async {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $token',
     });
+
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
 
     final data = jsonDecode(response.body);
 
@@ -717,6 +957,15 @@ static Future<Map<String, dynamic>> getActiveProperties({
       },
     );
 
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
     final data = jsonDecode(response.body);
 
     if (response.statusCode == 200 && data['success'] == true) {
@@ -758,6 +1007,15 @@ static Future<Map<String, dynamic>> getTaskDepartments() async {
       },
     );
 
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
     final data = jsonDecode(response.body);
 
     if (response.statusCode == 200 && data['success'] == true) {
@@ -789,6 +1047,15 @@ static Future<Map<String, dynamic>> getTaskTags() async {
         'Authorization': 'Bearer $token',
       },
     );
+
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
 
     final data = jsonDecode(response.body);
 
@@ -827,6 +1094,15 @@ static Future<Map<String, dynamic>> getAssignableUsers({int? departmentId}) asyn
       },
     );
 
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
     final data = jsonDecode(response.body);
 
     if (response.statusCode == 200 && data['success'] == true) {
@@ -859,6 +1135,15 @@ static Future<Map<String, dynamic>> createTask(Map<String, dynamic> payload) asy
       },
       body: jsonEncode(payload),
     );
+
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
  
     final data = jsonDecode(response.body);
  
@@ -956,6 +1241,16 @@ static Future<Map<String, dynamic>> createTask(Map<String, dynamic> payload) asy
 
       final response = await request.send();
       final responseBody = await response.stream.bytesToString();
+
+           // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${responseBody}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
       final data = jsonDecode(responseBody);
 
       print('Single Upload Response: $data');
@@ -1015,6 +1310,16 @@ static Future<Map<String, dynamic>> createTask(Map<String, dynamic> payload) asy
 
       print('Multiple Files Upload Response: $data');
 
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${responseBody}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
+
       if (response.statusCode == 200 && data['success'] == true) {
         return {
           'success': true,
@@ -1067,6 +1372,16 @@ static Future<Map<String, dynamic>> getMyCards({int page = 1}) async {
         'Authorization': 'Bearer $token',
       },
     );
+
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
  
     final data = jsonDecode(response.body);
     print("getMyCards page=$page response- $data");
@@ -1117,6 +1432,16 @@ static Future<Map<String, dynamic>> updateChecklistItem({
       body: jsonEncode({'is_done': isDone}),
     );
 
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
+
     final data = jsonDecode(response.body);
     print("updateChecklistItem response- $data");
 
@@ -1154,6 +1479,16 @@ static Future<Map<String, dynamic>> submitCardAsCompleted(int cardId) async {
         'status': 'COMPLETED',
       }),
     );
+
+    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
 
     final data = jsonDecode(response.body);
 

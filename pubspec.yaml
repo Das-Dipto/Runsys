@@ -4,7 +4,8 @@ publish_to: 'none'
 
 # version: 1.0.1+2
 # version: 1.0.2+3
-version: 1.0.3+4
+# version: 1.0.3+4
+version: 1.0.4+5
 
 environment:
   sdk: ^3.10.8
@@ -29,25 +30,25 @@ dev_dependencies:
 
 
 # Android launcher icons
-flutter_launcher_icons:
-  android: true
-  ios: true
-  image_path: "assets/icons/runsys-adaptive-fg.png"
-  adaptive_icon_background: "#421A86"
-  adaptive_icon_foreground: "assets/icons/runsys-adaptive-fg.png"
-  min_sdk_android: 21
-
-
-# Iphone launcher icons
 # flutter_launcher_icons:
 #   android: true
 #   ios: true
 #   image_path: "assets/icons/runsys-adaptive-fg.png"
 #   adaptive_icon_background: "#421A86"
 #   adaptive_icon_foreground: "assets/icons/runsys-adaptive-fg.png"
-#   remove_alpha_ios: true
-#   background_color_ios: "#421A86"  # <--- Combines fg + background for iOS
 #   min_sdk_android: 21
+
+
+# Iphone launcher icons
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icons/runsys-adaptive-fg.png"
+  adaptive_icon_background: "#421A86"
+  adaptive_icon_foreground: "assets/icons/runsys-adaptive-fg.png"
+  remove_alpha_ios: true
+  background_color_ios: "#421A86"  # <--- Combines fg + background for iOS
+  min_sdk_android: 21
 
 flutter:
   uses-material-design: true
