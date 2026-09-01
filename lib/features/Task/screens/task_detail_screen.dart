@@ -37,6 +37,15 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
   final Set<String> _savedItemIds = {};
 
+    // Focus/highlight support for the Submit Requirements validation flow
+  Map<String, GlobalKey> _itemKeys = {};
+  String? _highlightedItemId;
+  bool _isSubmittingRequirements = false;
+
+// ── Guided "fill missing requirements" flow ──
+bool _guidedFlowActive = false;
+final GlobalKey _submitButtonKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -65,9 +74,20 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   final existingAnswers = (data['existing_responses']?['answers'] as Map?)
           ?.cast<String, dynamic>() ??
       {};
+
+  final loadedSections = ((data['template']?['sections'] as List?) ?? [])
+      .cast<Map<String, dynamic>>();
+  final allItems = loadedSections
+      .expand((s) => (s['items'] as List? ?? []))
+      .cast<Map<String, dynamic>>();
+  final itemKeys = {
+    for (final it in allItems) it['id'].toString(): GlobalKey(),
+  };
+
   setState(() {
     _detail = data;
     _isLoading = false;
+    _itemKeys = itemKeys;
     _savedItemIds
       ..clear()
       ..addAll(existingAnswers.keys);   // ← items already saved from before
@@ -90,6 +110,134 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     } else {
       setState(() { _error = result['message']; _isLoading = false; });
     }
+  }
+
+Future<void> _onSubmitRequirementsPressed(List sections) async {
+    if (_isSubmittingRequirements) return; // guard is in logic, not on the widget
+
+    final unfulfilled = _submission.findFirstUnfulfilledItem(sections);
+    if (unfulfilled != null) {
+      _guidedFlowActive = true;
+
+       // Only shown when the user manually presses Submit with something
+      // still missing — not shown during the auto-focus/auto-scroll chain.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Still requirement left to fulfill',
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFFFF6B6B),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+
+
+      await _focusUnfulfilledItem(unfulfilled);
+      return;
+    }
+
+    _guidedFlowActive = false;
+    setState(() => _isSubmittingRequirements = true);
+    await _submission.showConfirmAndSubmit(
+      context: context,
+      taskId: widget.task.id,
+      timeLogId: _currentLogId,
+      sections: sections,
+      onSuccess: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Task submitted successfully!',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+            backgroundColor: const Color(0xFF43A047),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      },
+      onStopTimer: _onStopPressed,
+    );
+    if (mounted) setState(() => _isSubmittingRequirements = false);
+  }
+
+  void _onRequirementItemSaved(String itemId) {
+    setState(() => _savedItemIds.add(itemId));
+
+    if (!_guidedFlowActive) return;
+
+    final sections = (_detail?['template']?['sections'] as List?) ?? [];
+    final next = _submission.findFirstUnfulfilledItem(sections);
+    if (next != null) {
+      _focusUnfulfilledItem(next);
+    } else {
+      _guidedFlowActive = false;
+      _scrollToSubmitAndTrigger(sections); // now scroll-only — safe to leave name as-is
+    }
+  }
+
+  Future<void> _scrollToSubmitAndTrigger(List sections) async {
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    final ctx = _submitButtonKey.currentContext;
+    if (ctx != null) {
+      await Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 400),
+        alignment: 0.3,
+      );
+    }
+
+    // Scroll only — submission now waits for the user to actually press
+    // the button, not auto-triggered.
+    // if (!mounted) return;
+    // await _onSubmitRequirementsPressed(sections);
+  }
+
+
+
+ Future<void> _focusUnfulfilledItem(UnfulfilledItem unfulfilled) async {
+    setState(() => _highlightedItemId = unfulfilled.itemId);
+
+    // setState only *schedules* a rebuild — it doesn't happen synchronously.
+    // Wait for the frame to actually be built/laid out before measuring
+    // the item's position, otherwise ensureVisible can silently no-op.
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+
+    final ctx = _itemKeys[unfulfilled.itemId]?.currentContext;
+    if (ctx != null) {
+      await Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 400),
+        alignment: 0.3,
+      );
+    }
+
+    if (!mounted) return;
+    // ScaffoldMessenger.of(context).showSnackBar(
+    //   SnackBar(
+    //     content: Text(unfulfilled.message),
+    //     backgroundColor: const Color(0xFFFF6B6B),
+    //     behavior: SnackBarBehavior.floating,
+    //     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    //   ),
+    // );
+
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _highlightedItemId = null);
+    });
   }
 
   Future<void> _autoCheckTimerState() async {
@@ -400,18 +548,22 @@ bool get _isCompleted {
       children: [
         _buildSectionHeader('Requirements'),
         const SizedBox(height: 14),
-        TaskRequirementsSection(
-         detail: _detail!,
+        
+TaskRequirementsSection(
+  detail: _detail!,
   submission: _submission,
   taskId: widget.task.id,
   existingAnswers: (_detail!['existing_responses']?['answers'] as Map?)
           ?.cast<String, dynamic>() ??
       {},
   onChanged: () => setState(() {}),
-  onItemSaved: (id) => setState(() => _savedItemIds.add(id)),     // ← add
-  onItemEdited: (id) => setState(() => _savedItemIds.remove(id)), // ← add
-  readOnly: _isCompleted,   // ← add this
-        ),
+  onItemSaved: _onRequirementItemSaved,   // ← was: (id) => setState(() => _savedItemIds.add(id)),
+  onItemEdited: (id) => setState(() => _savedItemIds.remove(id)),
+  readOnly: _isCompleted,
+  itemKeys: _itemKeys,
+  highlightedItemId: _highlightedItemId,
+),
+
         const SizedBox(height: 32),
       ],
     ),
@@ -419,44 +571,29 @@ bool get _isCompleted {
 ],
 
 
-
                         if (sections.isNotEmpty && _isTimerRunning && _showRequirements) ...[
                           SizedBox(
+                            key: _submitButtonKey, 
                             width: double.infinity,
                             height: 52,
                             child: ElevatedButton.icon(
-                              onPressed: _allRequirementsSaved(sections)
-                                  ? () {
-                                      _submission.showConfirmAndSubmit(
-                                        context: context,
-                                        taskId: widget.task.id,
-                                        timeLogId: _currentLogId,
-                                        sections: sections,
-                                        onSuccess:  () {
-                                                            ScaffoldMessenger.of(context).showSnackBar(
-                                                              SnackBar(
-                                                                content: const Text(
-                                                                  'Task submitted successfully!',
-                                                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                                                                ),
-                                                                backgroundColor: const Color(0xFF43A047),
-                                                                behavior: SnackBarBehavior.floating,
-                                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                                              ),
-                                                            );
-                                                          },   // unchanged
-                                        onStopTimer: _onStopPressed,
-                                      );
-                                    }
-                                  : null,     // ← disabled until every item is saved
-                              icon: const Icon(Icons.assignment_turned_in_rounded, size: 22),
-                              label: const Text('Submit Requirements',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                              // Always enabled — completeness is checked
+                              // inside the handler, not via onPressed:null.
+                              onPressed: () => _onSubmitRequirementsPressed(sections),
+                              icon: _isSubmittingRequirements
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                                    )
+                                  : const Icon(Icons.assignment_turned_in_rounded, size: 22),
+                              label: Text(
+                                _isSubmittingRequirements ? 'Submitting...' : 'Submit Requirements',
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                              ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF43A047),
                                 foregroundColor: Colors.white,
-                                disabledBackgroundColor: const Color(0xFF43A047).withOpacity(0.35), // ← add
-                                disabledForegroundColor: Colors.white60,                            // ← add
                                 elevation: 0,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               ),

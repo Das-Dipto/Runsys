@@ -10,34 +10,19 @@ class RunsysApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Runsys',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+      ],
+      child: MaterialApp(
+        title: 'Runsys',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+          useMaterial3: true,
+        ),
+        home: const SplashScreen(),
       ),
-      builder: (context, child) {
-        return MultiProvider(
-          providers: [
-            ChangeNotifierProvider(create: (_) => AuthProvider()),
-          ],
-          child: UpgradeAlert(
-            showIgnore: false,
-            showLater: false,
-            barrierDismissible: false, // renamed from canDismissDialog
-            dialogStyle: UpgradeDialogStyle.material,
-            shouldPopScope: () => false, // block back-button dismiss too
-            upgrader: Upgrader(
-              debugLogging: false,
-              messages: UpgraderMessages(code: 'en'),
-              // No minAppVersion — always compares against current store version
-            ),
-            child: child!,
-          ),
-        );
-      },
-      home: const SplashScreen(),
     );
   }
 }

@@ -1,7 +1,107 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../Api/api_controller.dart';
 import '../../Home/Screens/home_screen.dart';
+
+// ── Result of a pre-submit validation check ─────────────────────────────
+class UnfulfilledItem {
+  final String itemId;
+  final String message;
+  UnfulfilledItem(this.itemId, this.message);
+}
+
+// ── Batch queue: collects item changes, flushes in small groups ─────────
+// Mirrors the Next.js BatchQueue — avoids one API call per Save press AND
+// avoids one giant request with all n items (which the backend chokes on).
+class _BatchQueue {
+  final Future<void> Function(List<Map<String, dynamic>> items) onSave;
+  final int batchSize;
+  final Duration maxDelay;
+
+  _BatchQueue(
+    this.onSave, {
+    this.batchSize = 10,
+    this.maxDelay = const Duration(seconds: 2),
+  });
+
+  final Map<String, Map<String, dynamic>> _queue = {};
+  Timer? _timer;
+  bool _isSaving = false;
+
+  void add(String itemId, Map<String, dynamic> value) {
+    _queue[itemId] = value;
+    _scheduleSave();
+  }
+
+  void _scheduleSave() {
+    _timer?.cancel();
+    if (_queue.length >= batchSize) {
+      _flush();
+      return;
+    }
+    _timer = Timer(maxDelay, _flush);
+  }
+
+
+  Future<bool> _flush() async {
+    if (_isSaving || _queue.isEmpty) return true;
+    _isSaving = true;
+
+    final items = _queue.entries
+        .map((e) => {'item_id': int.parse(e.key), ...e.value})
+        .toList();
+    _queue.clear();
+
+    bool allSucceeded = true;
+
+    // Send ONE item per API call instead of bundling everything into a
+    // single request — the backend can't insert a multi-item batch.
+    for (final item in items) {
+      try {
+        await onSave([item]);
+      } catch (_) {
+        allSucceeded = false;
+        final id = item['item_id'].toString();
+        final value = Map<String, dynamic>.from(item)..remove('item_id');
+        _queue[id] = value; // re-queue just this one item to retry later
+      }
+    }
+
+    _isSaving = false;
+    if (_queue.isNotEmpty) _scheduleSave();
+    return allSucceeded;
+  }
+
+  /// Used before Submit. Bounded — if saves keep failing (rate limit,
+  /// network), it backs off and eventually gives up instead of hammering
+  /// the API. Anything left queued keeps retrying via the normal 2s
+  /// debounce in the background.
+  Future<void> forceFlush() async {
+    _timer?.cancel();
+    int attempts = 0;
+    const maxAttempts = 5;
+
+    while (_queue.isNotEmpty || _isSaving) {
+      if (_isSaving) {
+        await Future.delayed(const Duration(milliseconds: 100));
+        continue;
+      }
+      final ok = await _flush();
+      if (ok) {
+        attempts = 0;
+      } else {
+        attempts++;
+        if (attempts >= maxAttempts) break;
+        await Future.delayed(Duration(seconds: attempts * 2));
+      }
+    }
+  }
+  
+  void destroy() {
+    _timer?.cancel();
+  }
+}
 
 class TaskSubmissionHandler {
   final Map<String, String> yesNoAnswers = {};
@@ -13,7 +113,48 @@ class TaskSubmissionHandler {
   Map<String, List<dynamic>> uploadedImages = {};
   final Map<String, List<String>> uploadedImageUrls = {};
 
+  // ── Batch save wiring ───────────────────────────────────────────────
+  int? _taskId;
+  final Map<String, void Function(bool success)> _itemListeners = {};
+  late final _BatchQueue _batchQueue = _BatchQueue(_flushBatch);
+
+  void registerItemListener(String itemId, void Function(bool success) listener) {
+    _itemListeners[itemId] = listener;
+  }
+
+  void unregisterItemListener(String itemId) {
+    _itemListeners.remove(itemId);
+  }
+
+  /// Called on every field change instead of a per-item Save button.
+  /// Debounced (2s) + capped at 10 items per request — see _BatchQueue.
+  void queueItemChange(int taskId, String itemId, Map<String, dynamic> saveData) {
+    _taskId = taskId;
+    _batchQueue.add(itemId, saveData);
+  }
+
+  Future<void> forceFlushBatch() => _batchQueue.forceFlush();
+
+  Future<void> _flushBatch(List<Map<String, dynamic>> items) async {
+    final taskId = _taskId;
+    if (taskId == null) return;
+
+    final result = await ApiController.submitItemResponse(taskId: taskId, items: items);
+    final success = result['success'] == true;
+
+    for (final item in items) {
+      final id = item['item_id'].toString();
+      _itemListeners[id]?.call(success);
+    }
+
+    if (!success) {
+      // Throwing tells _BatchQueue to re-queue these items and retry later.
+      throw Exception(result['message'] ?? 'Batch save failed');
+    }
+  }
+
   void dispose() {
+    _batchQueue.destroy();
     for (final c in reportControllers.values) {
       c.dispose();
     }
@@ -38,7 +179,9 @@ class TaskSubmissionHandler {
     }
   }
 
-  String? validateResponses(List sections) {
+  /// Same rule set as [validateResponses] but stops at (and returns) the
+  /// FIRST unfulfilled item so the UI can scroll/highlight it.
+  UnfulfilledItem? findFirstUnfulfilledItem(List sections) {
     for (final section in sections) {
       for (final item in (section['items'] as List? ?? [])) {
         final id = item['id'].toString();
@@ -47,34 +190,37 @@ class TaskSubmissionHandler {
         final imageMandatory = item['image_mandatory'] == true;
 
         if (type == 'YES_NO' && !yesNoAnswers.containsKey(id)) {
-          return '$question requires a Yes or No answer.';
+          return UnfulfilledItem(id, '$question requires a Yes or No answer.');
         }
         if (type == 'REPORT' &&
             (reportControllers[id]?.text.trim().isEmpty ?? true)) {
-          return '$question cannot be empty.';
+          return UnfulfilledItem(id, '$question cannot be empty.');
         }
         if (type == 'CHECKLIST' &&
             (checklistAnswers[id] == null || checklistAnswers[id]!.isEmpty)) {
-          return '$question requires a selection.';
+          return UnfulfilledItem(id, '$question requires a selection.');
         }
 
-        // Image validation — check uploadedImageUrls (actual uploaded URLs)
         if (imageMandatory) {
           final hasUploadedImage = uploadedImageUrls[id]?.isNotEmpty ?? false;
 
           if (type == 'YES_NO') {
             if (yesNoAnswers[id] == 'YES' && !hasUploadedImage) {
-              return '$question requires a photo when answered Yes.';
+              return UnfulfilledItem(id, '$question requires a photo when answered Yes.');
             }
           } else if (['CHECKLIST', 'REPORT'].contains(type)) {
             if (!hasUploadedImage) {
-              return '$question requires a photo.';
+              return UnfulfilledItem(id, '$question requires a photo.');
             }
           }
         }
       }
     }
     return null;
+  }
+
+  String? validateResponses(List sections) {
+    return findFirstUnfulfilledItem(sections)?.message;
   }
 
   List<Map<String, dynamic>> buildResponses(List sections) {
@@ -125,6 +271,10 @@ class TaskSubmissionHandler {
     required VoidCallback onSuccess,
     required Future<void> Function() onStopTimer,
   }) async {
+    // Make sure nothing is still sitting in the batch queue before we
+    // validate / submit the final payload.
+    await forceFlushBatch();
+
     final error = validateResponses(sections);
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(

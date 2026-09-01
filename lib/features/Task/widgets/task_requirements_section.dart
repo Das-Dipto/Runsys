@@ -7,13 +7,14 @@ import '../../Api/api_controller.dart';
 
 /// Renders all sections/items of a task's requirement template.
 ///
-/// Behavior change from before:
-///  - There is no more "Done" button.
-///  - Each item tracks its own "dirty" state locally. As soon as the user
-///    changes ANYTHING on an item (answer, checklist, photo, etc.) a
-///    "Save" button appears under that item.
-///  - Pressing Save calls `ApiController.submitItemResponse` for THAT item
-///    only (not the whole task) and shows a saved/error state.
+/// Behavior:
+///  - No per-item Save button anymore. Every change on an item is queued
+///    into TaskSubmissionHandler's batch queue (debounced, capped at 10
+///    items per request) instead of hitting the API immediately.
+///  - Each item shows a small "Saving…" / "Saved" indicator driven by the
+///    batch queue's result callback.
+///  - `itemKeys` / `highlightedItemId` let the parent screen scroll to and
+///    flash-highlight a specific unfulfilled item when Submit is pressed.
 class TaskRequirementsSection extends StatefulWidget {
   final Map<String, dynamic> detail;
   final TaskSubmissionHandler submission;
@@ -37,7 +38,15 @@ class TaskRequirementsSection extends StatefulWidget {
   /// Optional: fired when a previously-saved item becomes dirty again
   /// (user edited it after saving).
   final ValueChanged<String>? onItemEdited;
-  final bool readOnly;    
+  final bool readOnly;
+
+  /// Optional: stable GlobalKeys per item id, owned by the parent screen,
+  /// used to scroll a specific item into view.
+  final Map<String, GlobalKey>? itemKeys;
+
+  /// Optional: item id to flash-highlight (e.g. the first unfulfilled item
+  /// after a failed Submit attempt).
+  final String? highlightedItemId;
 
   const TaskRequirementsSection({
     super.key,
@@ -48,7 +57,9 @@ class TaskRequirementsSection extends StatefulWidget {
     this.existingAnswers = const {},
     this.onItemSaved,
     this.onItemEdited,
-    this.readOnly = false, 
+    this.readOnly = false,
+    this.itemKeys,
+    this.highlightedItemId,
   });
 
   @override
@@ -89,7 +100,7 @@ class _TaskRequirementsSectionState extends State<TaskRequirementsSection> {
               final itemId = item['id'].toString();
               widget.submission.initItem(item);
               return _RequirementItemCard(
-                key: ValueKey(itemId),
+                key: widget.itemKeys?[itemId] ?? ValueKey(itemId),
                 item: item,
                 submission: widget.submission,
                 taskId: widget.taskId,
@@ -98,6 +109,7 @@ class _TaskRequirementsSectionState extends State<TaskRequirementsSection> {
                 onSaved: () => widget.onItemSaved?.call(itemId),
                 onEdited: () => widget.onItemEdited?.call(itemId),
                 readOnly: widget.readOnly,
+                isHighlighted: widget.highlightedItemId == itemId,
               );
             }),
             const SizedBox(height: 16),
@@ -109,8 +121,9 @@ class _TaskRequirementsSectionState extends State<TaskRequirementsSection> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Single requirement item card. Owns its own dirty/saving/saved state and
-// is responsible for calling the API when the user taps "Save".
+// Single requirement item card. No longer owns a Save button — it queues
+// its change into the shared batch queue and reflects the result via a
+// registered listener.
 // ─────────────────────────────────────────────────────────────────────────
 
 class _RequirementItemCard extends StatefulWidget {
@@ -124,7 +137,8 @@ class _RequirementItemCard extends StatefulWidget {
   final VoidCallback onChanged;
   final VoidCallback onSaved;
   final VoidCallback onEdited;
-  final bool readOnly;      
+  final bool readOnly;
+  final bool isHighlighted;
 
   const _RequirementItemCard({
     super.key,
@@ -136,6 +150,7 @@ class _RequirementItemCard extends StatefulWidget {
     required this.onEdited,
     this.existingAnswer,
     this.readOnly = false,
+    this.isHighlighted = false,
   });
 
   @override
@@ -152,7 +167,6 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
 
   bool _isDirty = false;
   bool _isSaved = false;
-  bool _isSubmitting = false;
   bool _isUploadingImage = false;
 
   String get _itemId => widget.item['id'].toString();
@@ -165,13 +179,16 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
   void initState() {
     super.initState();
     _prefillFromExistingAnswer();
+    widget.submission.registerItemListener(_itemId, _onBatchResult);
+  }
+
+  @override
+  void dispose() {
+    widget.submission.unregisterItemListener(_itemId);
+    super.dispose();
   }
 
   // ── Pre-fill from a previously-saved answer ─────────────────────────────
-  // Runs once when the card is created. Writes the saved value straight
-  // into the same submission fields the live UI reads/writes, then marks
-  // the card as already "Saved" so the Save button doesn't show until the
-  // user actually changes something.
   void _prefillFromExistingAnswer() {
     final answer = widget.existingAnswer;
     if (answer == null) return;
@@ -222,9 +239,9 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
     _isDirty = false;
   }
 
-  // ── Dirty tracking ────────────────────────────────────────────────────
+  // ── Dirty tracking + queueing into the batch queue ──────────────────────
   void _markDirty() {
-    if (_readOnly) return; 
+    if (_readOnly) return;
     if (!_isDirty || _isSaved) {
       setState(() {
         _isDirty = true;
@@ -233,6 +250,30 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
       widget.onEdited();
     }
     widget.onChanged();
+
+    // Enqueue instead of calling the API directly — the shared batch queue
+    // on TaskSubmissionHandler debounces/groups this with other changes.
+    widget.submission.queueItemChange(widget.taskId, _itemId, _buildPayload());
+  }
+
+  // ── Called by the batch queue once this item's group is flushed ────────
+  void _onBatchResult(bool success) {
+    if (!mounted) return;
+    setState(() {
+      _isDirty = !success; // stays dirty (and will retry) if it failed
+      _isSaved = success;
+    });
+    if (success) {
+      widget.onSaved();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save "${widget.item['question'] ?? 'item'}"'),
+          backgroundColor: _red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   // ── Build the API payload for THIS item based on its type ───────────────
@@ -277,33 +318,6 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
         };
       default:
         return {'item_id': widget.item['id']};
-    }
-  }
-
-  // ── Save button pressed ───────────────────────────────────────────────
-  Future<void> _onSavePressed() async {
-    setState(() => _isSubmitting = true);
-
-    final result = await ApiController.submitItemResponse(
-      taskId: widget.taskId,
-      items: [_buildPayload()],
-    );
-
-    if (!mounted) return;
-
-    if (result['success'] == true) {
-      setState(() {
-        _isSubmitting = false;
-        _isDirty = false;
-        _isSaved = true;
-      });
-      widget.onSaved();
-    } else {
-      setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(result['message'] ?? 'Failed to save'),
-        backgroundColor: _red,
-      ));
     }
   }
 
@@ -438,7 +452,10 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
       decoration: BoxDecoration(
         color: const Color(0xFF16161F),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF1E1E2E)),
+        border: Border.all(
+          color: widget.isHighlighted ? _orange : const Color(0xFF1E1E2E),
+          width: widget.isHighlighted ? 2 : 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -595,40 +612,26 @@ class _RequirementItemCardState extends State<_RequirementItemCard> {
             _buildImageUploader(),
           ],
 
-          // ── Save button / Saved indicator ─────────────────────────────
-          if (_isDirty || _isSubmitting) ...[
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              height: 42,
-              child: ElevatedButton.icon(
-                onPressed: _isSubmitting ? null : _onSavePressed,
-                icon: _isSubmitting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Icon(Icons.save_outlined, size: 18),
-                label: Text(
-                  _isSubmitting ? 'Saving...' : 'Save',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+          // ── Saving / Saved indicator (no button) ───────────────────────
+          if (_isDirty) ...[
+            const SizedBox(height: 12),
+            const Row(
+              children: [
+                SizedBox(
+                  width: 13,
+                  height: 13,
+                  child: CircularProgressIndicator(strokeWidth: 1.8, color: _textSec),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _orange,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: _orange.withOpacity(0.5),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
+                SizedBox(width: 7),
+                Text('Saving…', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _textSec)),
+              ],
             ),
           ] else if (_isSaved) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             const Row(children: [
-              Icon(Icons.check_circle_rounded, size: 18, color: _green),
+              Icon(Icons.check_circle_rounded, size: 16, color: _green),
               SizedBox(width: 6),
-              Text('Saved', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _green)),
+              Text('Saved', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _green)),
             ]),
           ],
         ],

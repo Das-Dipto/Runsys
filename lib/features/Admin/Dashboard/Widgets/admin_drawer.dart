@@ -352,7 +352,7 @@ class AdminDrawer extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 20),
               child: Center(
                 child: Text(
-                  'v 1.0.5',
+                  'v 1.0.6',
                   style: TextStyle(
                     fontSize: 11,
                     color: _textSec.withOpacity(0.4),

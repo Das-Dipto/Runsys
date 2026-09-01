@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:upgrader/upgrader.dart';
 import 'login_screen.dart';
 import '../../Home/Screens/home_screen.dart';
 import '../../Admin/Dashboard/Screens/admin_dashboard.dart';
@@ -73,32 +74,40 @@ class _SplashScreenState extends State<SplashScreen>
       }
     });
 
-    Future.delayed(const Duration(milliseconds: 2800), () async {
-      if (!mounted) return;
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final success = await authProvider.tryAutoLogin();
-      if (!mounted) return;
 
-      if (success) {
-        // ── Role-based routing on auto login ──
-        final roleName =
-            authProvider.user?.roleName.toLowerCase().trim() ?? '';
-        final isAdmin = roleName == 'admin';
+Future.delayed(const Duration(milliseconds: 2800), () async {
+  if (!mounted) return;
 
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            transitionDuration: const Duration(milliseconds: 500),
-            pageBuilder: (_, __, ___) =>
-                isAdmin ? const AdminDashboardScreen() : const HomeScreen(),
-            transitionsBuilder: (_, anim, __, child) =>
-                FadeTransition(opacity: anim, child: child),
-          ),
-        );
-      } else {
-        _navigate(); // goes to LoginScreen
-      }
-    });
+  // ── Force-update gate: check BEFORE navigating anywhere ──
+  final upgrader = Upgrader(debugLogging: true);
+  await upgrader.initialize();
+
+  if (upgrader.isUpdateAvailable()) {
+    if (!mounted) return;
+    _showForceUpdateDialog(upgrader);
+    return; // do NOT navigate away — block here until user updates
+  }
+
+  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+  final success = await authProvider.tryAutoLogin();
+  if (!mounted) return;
+
+  if (success) {
+    final roleName = authProvider.user?.roleName.toLowerCase().trim() ?? '';
+    final isAdmin = roleName == 'admin';
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 500),
+        pageBuilder: (_, __, ___) => isAdmin ? const AdminDashboardScreen() : const HomeScreen(),
+        transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
+      ),
+    );
+  } else {
+    _navigate();
+  }
+});
+  
   }
 
   void _navigate() {
@@ -115,6 +124,52 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
   }
+
+void _showForceUpdateDialog(Upgrader upgrader) {
+  final installedVersion = upgrader.currentInstalledVersion ?? 'Unknown';
+  final storeVersion = upgrader.currentAppStoreVersion ?? 'Unknown';
+  final notes = upgrader.releaseNotes;
+
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    useRootNavigator: true,
+    builder: (dialogContext) => WillPopScope(
+      onWillPop: () async => false, // block back button
+      child: AlertDialog(
+        title: const Text('Update Required'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'A new version of Runsys is available.\n\n'
+                'Current version: $installedVersion\n'
+                'New version: $storeVersion',
+              ),
+              if (notes != null && notes.trim().isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  "What's new:",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                Text(notes),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => upgrader.sendUserToAppStore(),
+            child: const Text('Update Now'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
   @override
   void dispose() {
@@ -357,7 +412,7 @@ class _SplashScreenState extends State<SplashScreen>
                     color: orange.withOpacity(0.06),
                   ),
                   child: Text(
-                    'v 1.0.5',
+                    'v 1.0.6',
                     style: TextStyle(
                       fontSize: 11,
                       color: orange.withOpacity(0.55),
