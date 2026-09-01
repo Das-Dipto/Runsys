@@ -5,7 +5,8 @@ publish_to: 'none'
 # version: 1.0.1+2
 # version: 1.0.2+3
 # version: 1.0.3+4
-version: 1.0.4+5
+# version: 1.0.4+5
+version: 1.0.5+6
 
 environment:
   sdk: ^3.10.8
@@ -21,6 +22,7 @@ dependencies:
   image_picker: ^1.0.4
   image_cropper: ^12.2.1
   flutter_html: ^3.0.0
+  upgrader: ^13.7.0
 
 dev_dependencies:
   flutter_test:
