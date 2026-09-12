@@ -179,7 +179,8 @@ static Future<Map<String, dynamic>> getAssignedTasks({
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
 
-      final url = Uri.parse('$_baseUrl/api/v1/app_task/my-tasks');
+      // final url = Uri.parse('$_baseUrl/api/v1/app_task/my-tasks');
+      final url = Uri.parse('$_baseUrl/api/v1/mobileapp/my-tasks');
       final response = await http.get(
         url,
         headers: {
@@ -265,7 +266,10 @@ static Future<Map<String, dynamic>> getAssignedTasks({
         queryParams['status'] = 'COMPLETED';
       }
 
-      final uri = Uri.parse('$_baseUrl/api/v1/app_task/my-tasks')
+      // final uri = Uri.parse('$_baseUrl/api/v1/app_task/my-tasks')
+      //     .replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
+
+      final uri = Uri.parse('$_baseUrl/api/v1/mobileapp/my-tasks')
           .replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
 
       print("API Call: $uri");
@@ -314,7 +318,8 @@ static Future<Map<String, dynamic>> getAssignedTasks({
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
 
-    final url = Uri.parse('$_baseUrl/api/v1/app_task/my-tasks?status=COMPLETED');
+    // final url = Uri.parse('$_baseUrl/api/v1/app_task/my-tasks?status=COMPLETED');
+    final url = Uri.parse('$_baseUrl/api/v1/mobileapp/my-tasks?status=COMPLETED');
     final response = await http.get(
       url,
       headers: {
@@ -351,7 +356,8 @@ static Future<Map<String, dynamic>> getAssignedTasks({
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
 
-    final url = Uri.parse('$_baseUrl/api/v1/app_task/tasks/$taskId');
+    // final url = Uri.parse('$_baseUrl/api/v1/app_task/tasks/$taskId');
+    final url = Uri.parse('$_baseUrl/api/v1/mobileapp/tasks/$taskId/summary');
     final response = await http.get(
       url,
       headers: {
