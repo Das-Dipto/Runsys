@@ -387,6 +387,171 @@ static Future<Map<String, dynamic>> getAssignedTasks({
   }
 }
 
+static Future<Map<String, dynamic>> getTaskSections(int taskId) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    final url = Uri.parse('$_baseUrl/api/v1/mobileapp/tasks/$taskId/sections');
+    final response = await http.get(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on getTaskSections: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {'success': true, 'data': data['data'] ?? []};
+    } else {
+      return {'success': false, 'message': data['message'] ?? 'Failed to fetch sections'};
+    }
+  } catch (e) {
+    print("getTaskSections error: $e");
+    return {'success': false, 'message': 'Network error. Please check your connection.'};
+  }
+}
+
+
+static Future<Map<String, dynamic>> getTaskItems({
+  required int taskId,
+  required int sectionId,
+  int page = 1,
+  int limit = 20,
+}) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    final queryParams = <String, String>{
+      'section_id': '$sectionId',
+      'page': '$page',
+      'limit': '$limit',
+    };
+
+    final uri = Uri.parse('$_baseUrl/api/v1/mobileapp/tasks/$taskId/items')
+        .replace(queryParameters: queryParams);
+
+    final response = await http.get(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on getTaskItems: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {'success': true, 'data': data['data'] ?? [], 'meta': data['meta'] ?? {}};
+    } else {
+      return {'success': false, 'message': data['message'] ?? 'Failed to fetch items'};
+    }
+  } catch (e) {
+    print("getTaskItems error: $e");
+    return {'success': false, 'message': 'Network error. Please check your connection.'};
+  }
+}
+
+
+static Future<Map<String, dynamic>> getItemResponses({
+  required int taskId,
+  required List<int> itemIds,
+}) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    final uri = Uri.parse('$_baseUrl/api/v1/mobileapp/tasks/$taskId/responses')
+        .replace(queryParameters: {'item_ids': itemIds.join(',')});
+
+    final response = await http.get(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on getItemResponses: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
+    final data = jsonDecode(response.body);
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {'success': true, 'data': data['data'] ?? {}};
+    } else {
+      return {'success': false, 'message': data['message'] ?? 'Failed to fetch responses'};
+    }
+  } catch (e) {
+    print("getItemResponses error: $e");
+    return {'success': false, 'message': 'Network error. Please check your connection.'};
+  }
+}
+
+
+static Future<Map<String, dynamic>> saveTaskItem({
+  required int taskId,
+  required Map<String, dynamic> payload,
+}) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    final url = Uri.parse('$_baseUrl/api/v1/mobileapp/tasks/$taskId/save-item');
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode(payload),
+    );
+
+    if (response.statusCode == 429) {
+      print("🚫 Backend rate limit hit on saveTaskItem: ${response.body}");
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
+    final data = jsonDecode(response.body);
+
+    if ((response.statusCode == 200 || response.statusCode == 201) && data['success'] == true) {
+      return {'success': true, 'queued': data['queued'], 'saved_at': data['saved_at']};
+    } else {
+      return {'success': false, 'message': data['message'] ?? 'Failed to save item'};
+    }
+  } catch (e) {
+    print("saveTaskItem error: $e");
+    return {'success': false, 'message': 'Network error. Please check your connection.'};
+  }
+}
+
 
 static Future<Map<String, dynamic>> getProfile() async {
   try {
@@ -839,6 +1004,55 @@ static Future<Map<String, dynamic>> submitTask({
   }
 }
 
+
+static Future<Map<String, dynamic>> getSubmitStatus(String jobId) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
+    final url = Uri.parse('$_baseUrl/api/v1/mobileapp/tasks/submit-status/$jobId');
+    final response = await http.get(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    if (response.statusCode == 429) {
+      return {
+        'success': false,
+        'message': 'Too many requests from this IP, please try again after 5 minutes.',
+      };
+    }
+
+    Map<String, dynamic> data;
+    try {
+      data = jsonDecode(response.body);
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'Unexpected server response (${response.statusCode}).',
+      };
+    }
+
+    if (response.statusCode == 400) {
+      return {'success': false, 'code': 400, 'message': data['message'] ?? 'Task already submitted.'};
+    }
+    if (response.statusCode == 403) {
+      return {'success': false, 'code': 403, 'message': data['message'] ?? 'You are not assigned to this task.'};
+    }
+
+    if (response.statusCode == 200 && data['success'] == true) {
+      return {'success': true, 'data': data['data'] ?? {}};
+    } else {
+      return {'success': false, 'message': data['message'] ?? 'Failed to check submission status'};
+    }
+  } catch (e) {
+    print("getSubmitStatus error: $e");
+    return {'success': false, 'message': 'Network error. Please check your connection.'};
+  }
+}
 
 static Future<Map<String, dynamic>> getAllTasks({
   int page = 1,

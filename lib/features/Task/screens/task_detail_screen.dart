@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../Api/api_controller.dart';
 import '../../Models/task_model.dart';
-import '../widgets/task_submission_handler.dart';
-import '../widgets/task_requirements_section.dart';
+import '../../Home/Screens/home_screen.dart';
+import './../widgets/task_sections_acordion.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final TaskModel task;
@@ -31,20 +31,16 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   String? _lastTotalFormatted;
   String? _lastBillable;
 
-  final _submission = TaskSubmissionHandler();
-
   bool _showRequirements = false;
-
-  final Set<String> _savedItemIds = {};
-
-    // Focus/highlight support for the Submit Requirements validation flow
-  Map<String, GlobalKey> _itemKeys = {};
-  String? _highlightedItemId;
+  bool _requirementsOpenedOnce = false;
   bool _isSubmittingRequirements = false;
 
-// ── Guided "fill missing requirements" flow ──
-bool _guidedFlowActive = false;
-final GlobalKey _submitButtonKey = GlobalKey();
+  bool _completedResolved = false; 
+  bool _isCompleted = false; // true only once real server data confirms status
+
+  // Live section progress, reported up by TaskSectionsAccordion.
+  List<Map<String, dynamic>> _taskSections = [];
+  final GlobalKey<TaskSectionsAccordionState> _accordionKey = GlobalKey<TaskSectionsAccordionState>();
 
   @override
   void initState() {
@@ -59,9 +55,9 @@ final GlobalKey _submitButtonKey = GlobalKey();
   @override
   void dispose() {
     _ticker?.cancel();
-    _submission.dispose();
     super.dispose();
   }
+
 
   // ── Data loading ──────────────────────────────────────────────────────────
   Future<void> _loadDetail() async {
@@ -70,36 +66,41 @@ final GlobalKey _submitButtonKey = GlobalKey();
     if (!mounted) return;
 
     if (result['success'] == true) {
-        final data = result['data'];
-  final existingAnswers = (data['existing_responses']?['answers'] as Map?)
-          ?.cast<String, dynamic>() ??
-      {};
+      final data = result['data'];
 
-  final loadedSections = ((data['template']?['sections'] as List?) ?? [])
-      .cast<Map<String, dynamic>>();
-  final allItems = loadedSections
-      .expand((s) => (s['items'] as List? ?? []))
-      .cast<Map<String, dynamic>>();
-  final itemKeys = {
-    for (final it in allItems) it['id'].toString(): GlobalKey(),
-  };
+       final rawStatus = data['my_assignment']?['assignment_status'] ??
+          data['my_assignment']?['status'] ??
+          data['status'] ??
+          '';
+      final status = rawStatus.toString().trim().toLowerCase();
+      print('DEBUG _loadDetail status parse → raw: $rawStatus, normalized: $status');
 
-  setState(() {
-    _detail = data;
-    _isLoading = false;
-    _itemKeys = itemKeys;
-    _savedItemIds
-      ..clear()
-      ..addAll(existingAnswers.keys);   // ← items already saved from before
-  });
+      setState(() {
+        _detail = data;
+        _isLoading = false;
+        _isCompleted = status == 'completed';
+        _completedResolved = true;
+      });
 
-      final isActive = data['is_timer_active'] == true;
+      print('DEBUG after setState → completedResolved: $_completedResolved, isCompleted: $_isCompleted'); // ADD THIS LINE
+
+           // Timer state can come back either flat (is_timer_active /
+      // active_time_log) or nested under a `timer` object, depending on
+      // which endpoint served this. Handle both.
+      final timer = data['timer'];
+
+      final isActive = data['is_timer_active'] == true || timer?['is_active'] == true;
+
       final activeLog = data['active_time_log'];
+      final logId = (activeLog?['id'] as num?)?.toInt() ??
+          (timer?['active_time_log_id'] as num?)?.toInt();
+      final elapsedSeconds = (activeLog?['elapsed_seconds'] as num?)?.toInt() ??
+          (timer?['elapsed_seconds'] as num?)?.toInt() ??
+          0;
 
-      if (isActive && activeLog != null) {
-        final logId = (activeLog['id'] as num).toInt();
-        final elapsedSeconds = (activeLog['elapsed_seconds'] as num?)?.toInt() ?? 0;
+      print('DEBUG timer parse → isActive: $isActive, logId: $logId, elapsed: $elapsedSeconds'); // TEMP
 
+      if (isActive && logId != null) {
         setState(() {
           _isTimerRunning = true;
           _currentLogId = logId;
@@ -112,15 +113,11 @@ final GlobalKey _submitButtonKey = GlobalKey();
     }
   }
 
-Future<void> _onSubmitRequirementsPressed(List sections) async {
-    if (_isSubmittingRequirements) return; // guard is in logic, not on the widget
+  Future<void> _onSubmitRequirementsPressed() async {
+    if (_isSubmittingRequirements) return;
 
-    final unfulfilled = _submission.findFirstUnfulfilledItem(sections);
-    if (unfulfilled != null) {
-      _guidedFlowActive = true;
-
-       // Only shown when the user manually presses Submit with something
-      // still missing — not shown during the auto-focus/auto-scroll chain.
+    final incomplete = _taskSections.where((s) => s['is_complete'] != true).toList();
+    if (incomplete.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Row(
@@ -129,7 +126,7 @@ Future<void> _onSubmitRequirementsPressed(List sections) async {
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Still requirement left to fulfill',
+                  'Requirements need to be filled',
                   style: TextStyle(fontWeight: FontWeight.w500),
                 ),
               ),
@@ -140,104 +137,221 @@ Future<void> _onSubmitRequirementsPressed(List sections) async {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       );
-
-
-      await _focusUnfulfilledItem(unfulfilled);
+      setState(() => _showRequirements = true);
+      await _accordionKey.currentState?.goToNextIncomplete();
       return;
     }
 
-    _guidedFlowActive = false;
     setState(() => _isSubmittingRequirements = true);
-    await _submission.showConfirmAndSubmit(
-      context: context,
-      taskId: widget.task.id,
-      timeLogId: _currentLogId,
-      sections: sections,
-      onSuccess: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Task submitted successfully!',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-            ),
-            backgroundColor: const Color(0xFF43A047),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
-      },
-      onStopTimer: _onStopPressed,
-    );
+    await _showSubmitConfirmDialog();
     if (mounted) setState(() => _isSubmittingRequirements = false);
   }
 
-  void _onRequirementItemSaved(String itemId) {
-    setState(() => _savedItemIds.add(itemId));
+  Future<void> _showSubmitConfirmDialog() async {
+    final remarksCtrl = TextEditingController();
+    final commentCtrl = TextEditingController();
+    bool isSubmitting = false;
 
-    if (!_guidedFlowActive) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF111118),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Row(
+                children: [
+                  Icon(Icons.assignment_turned_in_rounded, color: Color(0xFFFF7300), size: 22),
+                  SizedBox(width: 10),
+                  Text('Submit Task',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white)),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _dialogField('Remarks', remarksCtrl, 'Add remarks…'),
+                    const SizedBox(height: 14),
+                    _dialogField('Comment', commentCtrl, 'Add a comment…'),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
+                  child: const Text('Cancel', style: TextStyle(color: Color(0xFF8A8A9A))),
+                ),
+              
+                ElevatedButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          setDialogState(() => isSubmitting = true);
 
-    final sections = (_detail?['template']?['sections'] as List?) ?? [];
-    final next = _submission.findFirstUnfulfilledItem(sections);
-    if (next != null) {
-      _focusUnfulfilledItem(next);
-    } else {
-      _guidedFlowActive = false;
-      _scrollToSubmitAndTrigger(sections); // now scroll-only — safe to leave name as-is
-    }
+                          // 1. Make sure every /save-item call has resolved
+                          //    before we submit, so nothing is missed.
+                          await _accordionKey.currentState?.waitForPendingSaves();
+
+                          // 2. Submit the task.
+                          final result = await ApiController.submitTask(
+                            taskId: widget.task.id,
+                            responses: const [],
+                            timeLogId: _currentLogId,
+                            remarks: remarksCtrl.text,
+                            comment: commentCtrl.text,
+                          );
+
+                          if (!ctx.mounted) return;
+
+                          if (result['success'] != true) {
+                            Navigator.pop(ctx);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(result['message'] ?? 'Submission failed')),
+                            );
+                            return;
+                          }
+
+                          // 3. Extract job_id (if the API queued the submission).
+                          final jobId = result['data']?['data']?['job_id']?.toString();
+                          Navigator.pop(ctx);
+
+                          if (jobId == null) {
+                            // No job_id returned — treat as immediately successful.
+                            await _onSubmitSuccess();
+                            return;
+                          }
+
+                          // 4. Poll submit-status until it resolves.
+                          await _pollSubmitStatus(jobId);
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF7300),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Submit', style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
-  Future<void> _scrollToSubmitAndTrigger(List sections) async {
-    await WidgetsBinding.instance.endOfFrame;
-    if (!mounted) return;
-
-    final ctx = _submitButtonKey.currentContext;
-    if (ctx != null) {
-      await Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 400),
-        alignment: 0.3,
+    Future<void> _pollSubmitStatus(String jobId, {int maxAttempts = 15}) async {
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator(color: Color(0xFFFF7300))),
       );
     }
 
-    // Scroll only — submission now waits for the user to actually press
-    // the button, not auto-triggered.
-    // if (!mounted) return;
-    // await _onSubmitRequirementsPressed(sections);
-  }
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      final status = await ApiController.getSubmitStatus(jobId);
 
+      if (status['code'] == 400) {
+        if (!mounted) return;
+        Navigator.pop(context); // close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(status['message'] ?? 'Task already submitted.')),
+        );
+        return; // do not retry
+      }
 
+      if (status['code'] == 403) {
+        if (!mounted) return;
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(status['message'] ?? 'You are not assigned to this task.')),
+        );
+        return;
+      }
 
- Future<void> _focusUnfulfilledItem(UnfulfilledItem unfulfilled) async {
-    setState(() => _highlightedItemId = unfulfilled.itemId);
+      if (status['success'] == true) {
+        final jobStatus = (status['data']?['status'] ?? '').toString().toUpperCase();
+        if (jobStatus == 'COMPLETED' || jobStatus == 'SUCCESS') {
+          if (!mounted) return;
+          Navigator.pop(context);
+          await _onSubmitSuccess();
+          return;
+        }
+        if (jobStatus == 'FAILED' || jobStatus == 'ERROR') {
+          if (!mounted) return;
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(status['data']?['message'] ?? 'Submission failed')),
+          );
+          return;
+        }
+        // else still QUEUED/PROCESSING → keep polling
+      }
 
-    // setState only *schedules* a rebuild — it doesn't happen synchronously.
-    // Wait for the frame to actually be built/laid out before measuring
-    // the item's position, otherwise ensureVisible can silently no-op.
-    await WidgetsBinding.instance.endOfFrame;
-    if (!mounted) return;
-
-    final ctx = _itemKeys[unfulfilled.itemId]?.currentContext;
-    if (ctx != null) {
-      await Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 400),
-        alignment: 0.3,
-      );
+      await Future.delayed(const Duration(seconds: 2));
     }
 
+    // Timed out waiting — leave user on the task screen with an error,
+    // per the failure behavior spec.
     if (!mounted) return;
-    // ScaffoldMessenger.of(context).showSnackBar(
-    //   SnackBar(
-    //     content: Text(unfulfilled.message),
-    //     backgroundColor: const Color(0xFFFF6B6B),
-    //     behavior: SnackBarBehavior.floating,
-    //     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    //   ),
-    // );
+    Navigator.pop(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Submission is taking longer than expected. Please check back shortly.')),
+    );
+  }
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _highlightedItemId = null);
-    });
+  Future<void> _onSubmitSuccess() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Task submitted successfully!',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        backgroundColor: const Color(0xFF43A047),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+    await _onStopPressed(); // auto-off the timer
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const HomeScreen(initialTabIndex: 4)),
+      (route) => false,
+    );
+  }
+
+  Widget _dialogField(String label, TextEditingController ctrl, String hint) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 13, color: Color(0xFF8A8A9A), fontWeight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        TextField(
+          controller: ctrl,
+          minLines: 2,
+          maxLines: 4,
+          style: const TextStyle(fontSize: 14, color: Colors.white),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: const TextStyle(fontSize: 14, color: Color(0xFF8A8A9A)),
+            filled: true,
+            fillColor: const Color(0xFF16161F),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF1E1E2E))),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF1E1E2E))),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFF7300), width: 1.5)),
+          ),
+        ),
+      ],
+    );
   }
 
   Future<void> _autoCheckTimerState() async {
@@ -255,7 +369,9 @@ Future<void> _onSubmitRequirementsPressed(List sections) async {
         _currentLogId   = logId;
         _elapsed        = alreadyElapsed;
       });
+
       _startTicker();
+      _accordionKey.currentState?.refreshAll();  // NEW
     } else {
       setState(() { _isTimerRunning = false; });
     }
@@ -308,6 +424,10 @@ Future<void> _onSubmitRequirementsPressed(List sections) async {
       });
 
       _startTicker();
+
+       // ── NEW: force the requirements accordion to re-sync answers ──
+      _accordionKey.currentState?.refreshAll();
+
     } else {
       setState(() => _isStartLoading = false);
       if (mounted) {
@@ -397,6 +517,63 @@ Future<void> _onSubmitRequirementsPressed(List sections) async {
     }
   }
 
+  
+  
+    /// Returns true if it's OK to leave the screen. If a timer is running,
+  /// asks the user whether to stop it first.
+  Future<bool> _confirmLeaveWhileRunning() async {
+    if (!_isTimerRunning) return true;
+
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF111118),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.timer_outlined, color: Color(0xFFFF7300), size: 22),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text('Task is running',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: Colors.white)),
+            ),
+          ],
+        ),
+        content: const Text(
+          'The timer for this task is still running. Do you want to stop it before leaving?',
+          style: TextStyle(fontSize: 14.5, color: Color(0xFF8A8A9A), height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'no'),
+            child: const Text('No, keep running', style: TextStyle(color: Color(0xFF8A8A9A))),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, 'yes'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF6B6B),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('Yes, stop', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+
+    // Dialog dismissed by tapping outside → stay on the screen.
+    if (choice == null) return false;
+
+    if (choice == 'yes') {
+      await _onStopPressed();
+    }
+    return true; // both Yes and No leave the screen; only Yes stops the timer
+  }
+  
+  
+  
+  
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   Color _priorityColor(String priority) {
@@ -410,7 +587,7 @@ Future<void> _onSubmitRequirementsPressed(List sections) async {
 
 String _formatDate(String? iso) {
   if (iso == null) return '—';
-  final dt = DateTime.tryParse(iso)?.toLocal();   // ← add .toLocal()
+  final dt = DateTime.tryParse(iso)?.toLocal();
   if (dt == null) return '—';
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const days   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -428,7 +605,7 @@ String _formatDate(String? iso) {
   }
 
 bool get _isOverdue {
-  if (_isCompleted) return false;   // ← add this line
+  if (_isCompleted) return false;
 
   final due = _detail?['due_date'] ?? widget.task.dueDate;
   if (due == null) return false;
@@ -437,242 +614,204 @@ bool get _isOverdue {
 
 
 
-  int _countFilledItems() {
-    int count = 0;
-    final sections = (_detail?['template']?['sections'] as List?) ?? [];
-    for (final section in sections) {
-      for (final item in (section['items'] as List? ?? [])) {
-        final id = item['id'].toString();
-        final type = item['type'] ?? '';
-        if (type == 'YES_NO' && _submission.yesNoAnswers.containsKey(id)) {
-          count++;
-        } else if (type == 'REPORT' && (_submission.reportControllers[id]?.text.trim().isNotEmpty ?? false)) {
-          count++;
-        } else if (type == 'CHECKLIST' && (_submission.checklistAnswers[id] != null && _submission.checklistAnswers[id]!.isNotEmpty)) {
-          count++;
-        }
-      }
-    }
-    return count;
-  }
-
-  bool _allRequirementsSaved(List sections) {
-  final total = sections.fold<int>(
-      0, (sum, s) => sum + ((s['items'] as List?)?.length ?? 0));
-  if (total == 0) return false;
-  return _savedItemIds.length >= total;
-}
-
-bool get _isCompleted {
-  final status = (_detail?['my_assignment']?['assignment_status'] ??
-          _detail?['status'] ??
-          widget.task.myAssignment.status)
-      .toString()
-      .toLowerCase();
-  return status == 'completed';
-}
-
   // ── Build ─────────────────────────────────────────────────────────────────
-
   @override
   Widget build(BuildContext context) {
-    final sections = (_detail?['template']?['sections'] as List?) ?? [];
-    return Scaffold(
-      backgroundColor: const Color(0xFF0A0A0F),
-      body: Stack(
-        children: [
-          CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(child: _buildMapHeader(context)),
-              if (_isLoading)
-                const SliverFillRemaining(
-                  child: Center(child: CircularProgressIndicator(color: Color(0xFFFF7300))),
-                )
-              else if (_error != null)
-                SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.error_outline, color: Color(0xFFFF6B6B), size: 42),
-                        const SizedBox(height: 12),
-                        Text(_error!, style: const TextStyle(color: Color(0xFF8A8A9A))),
-                        const SizedBox(height: 16),
-                        TextButton(
-                          onPressed: _loadDetail,
-                          child: const Text('Retry', style: TextStyle(color: Color(0xFFFF7300))),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              else ...[
-                SliverToBoxAdapter(child: _buildStatusStrip()),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 160),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildTaskHeader(),
-                        const SizedBox(height: 20),
-                        _buildInfoRow(Icons.calendar_today_rounded, 'Due on', _formatDate(_detail!['due_date'])),
-                        const SizedBox(height: 16),
-                        _buildInfoRow(Icons.business_rounded, 'Department', _detail!['department_name'] ?? '—'),
-                        const SizedBox(height: 16),
-                        _buildInfoRow(Icons.person_outline_rounded, 'Created by', _detail!['created_by_name'] ?? '—'),
-                        if (_detail!['template_title'] != null) ...[
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldLeave = await _confirmLeaveWhileRunning();
+        if (shouldLeave && mounted) Navigator.of(context).pop();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF0A0A0F),
+        body: Stack(
+          children: [
+            CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(child: _buildMapHeader(context)),
+                if (_isLoading)
+                  const SliverFillRemaining(
+                    child: Center(child: CircularProgressIndicator(color: Color(0xFFFF7300))),
+                  )
+                else if (_error != null)
+                  SliverFillRemaining(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.error_outline, color: Color(0xFFFF6B6B), size: 42),
+                          const SizedBox(height: 12),
+                          Text(_error!, style: const TextStyle(color: Color(0xFF8A8A9A))),
                           const SizedBox(height: 16),
-                          _buildInfoRow(Icons.description_outlined, 'Template', _detail!['template_title']),
+                          TextButton(
+                            onPressed: _loadDetail,
+                            child: const Text('Retry', style: TextStyle(color: Color(0xFFFF7300))),
+                          ),
                         ],
-                        const SizedBox(height: 20),
-                        if ((_detail!['tags_details'] as List?)?.isNotEmpty == true) ...[
-                          _buildTagsRow(),
+                      ),
+                    ),
+                  )
+                else ...[
+                  SliverToBoxAdapter(child: _buildStatusStrip()),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 160),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildTaskHeader(),
                           const SizedBox(height: 20),
-                        ],
-                        _buildActionTiles(),
-                        const SizedBox(height: 32),
+                          _buildInfoRow(Icons.calendar_today_rounded, 'Due on', _formatDate(_detail!['due_date'])),
+                          const SizedBox(height: 16),
+                          _buildInfoRow(Icons.business_rounded, 'Department', _detail!['department_name'] ?? '—'),
+                          const SizedBox(height: 16),
+                          _buildInfoRow(Icons.person_outline_rounded, 'Created by', _detail!['created_by_name'] ?? '—'),
+                          if (_detail!['template_title'] != null) ...[
+                            const SizedBox(height: 16),
+                            _buildInfoRow(Icons.description_outlined, 'Template', _detail!['template_title']),
+                          ],
+                          const SizedBox(height: 20),
+                          if ((_detail!['tags_details'] as List?)?.isNotEmpty == true) ...[
+                            _buildTagsRow(),
+                            const SizedBox(height: 20),
+                          ],
+                          _buildActionTiles(),
+                          const SizedBox(height: 32),
 
-                        if (_lastTotalFormatted != null || _lastBillable != null)
-                          _buildSessionSummary(),
+                          if (_lastTotalFormatted != null || _lastBillable != null)
+                            _buildSessionSummary(),
 
-                        // ── Requirements section (now delegated to separate widget) ──
-                       if (_detail!['template'] != null) ...[
-  Visibility(
-    visible: _showRequirements,
-    maintainState: true,   // keeps the ~150 item widgets mounted, just hidden
-    maintainAnimation: true,
-    maintainSize: false,
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader('Requirements'),
-        const SizedBox(height: 14),
-        
-TaskRequirementsSection(
-  detail: _detail!,
-  submission: _submission,
-  taskId: widget.task.id,
-  existingAnswers: (_detail!['existing_responses']?['answers'] as Map?)
-          ?.cast<String, dynamic>() ??
-      {},
-  onChanged: () => setState(() {}),
-  onItemSaved: _onRequirementItemSaved,   // ← was: (id) => setState(() => _savedItemIds.add(id)),
-  onItemEdited: (id) => setState(() => _savedItemIds.remove(id)),
-  readOnly: _isCompleted,
-  itemKeys: _itemKeys,
-  highlightedItemId: _highlightedItemId,
-),
-
-        const SizedBox(height: 32),
-      ],
-    ),
-  ),
-],
-
-
-                        if (sections.isNotEmpty && _isTimerRunning && _showRequirements) ...[
-                          SizedBox(
-                            key: _submitButtonKey, 
-                            width: double.infinity,
-                            height: 52,
-                            child: ElevatedButton.icon(
-                              // Always enabled — completeness is checked
-                              // inside the handler, not via onPressed:null.
-                              onPressed: () => _onSubmitRequirementsPressed(sections),
-                              icon: _isSubmittingRequirements
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
-                                    )
-                                  : const Icon(Icons.assignment_turned_in_rounded, size: 22),
-                              label: Text(
-                                _isSubmittingRequirements ? 'Submitting...' : 'Submit Requirements',
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF43A047),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          // ── Requirements (sections accordion, loaded on demand) ──
+                          if (_requirementsOpenedOnce) ...[
+                            Visibility(
+                              visible: _showRequirements,
+                              maintainState: true,
+                              maintainAnimation: true,
+                              maintainSize: false,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildSectionHeader('Requirements'),
+                                  const SizedBox(height: 14),
+                                  TaskSectionsAccordion(
+                                    key: _accordionKey,
+                                    taskId: widget.task.id,
+                                    readOnly: _isCompleted,
+                                    onProgressChanged: (sections) => setState(() => _taskSections = sections),
+                                  ),
+                                  const SizedBox(height: 20),
+                                  if (!_isCompleted && _isTimerRunning)
+                                    SizedBox(
+                                      width: double.infinity,
+                                      height: 52,
+                                      child: ElevatedButton.icon(
+                                        onPressed: _isSubmittingRequirements ? null : _onSubmitRequirementsPressed,
+                                        icon: _isSubmittingRequirements
+                                            ? const SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                                              )
+                                            : const Icon(Icons.assignment_turned_in_rounded, size: 22),
+                                        label: Text(
+                                          _isSubmittingRequirements ? 'Submitting...' : 'Submit Requirements',
+                                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: const Color(0xFF43A047),
+                                          foregroundColor: Colors.white,
+                                          elevation: 0,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                        ),
+                                      ),
+                                    ),
+                                  const SizedBox(height: 32),
+                                ],
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 32),
-                        ],
+                          ],
 
-                        _buildSectionHeader('Comments'),
-                        const SizedBox(height: 14),
-                        _buildComments(),
-                        const SizedBox(height: 32),
-
-                        if ((_detail!['time_logs'] as List?)?.isNotEmpty == true) ...[
-                          _buildSectionHeader('Time Logs'),
+                          _buildSectionHeader('Comments'),
                           const SizedBox(height: 14),
-                          _buildTimeLogs(),
+                          _buildComments(),
                           const SizedBox(height: 32),
-                        ],
 
-                        _buildSectionHeader('Task'),
-                        const SizedBox(height: 14),
-                        _buildNavRow(
-                          icon: Icons.attach_money_rounded,
-                          label: 'Rate',
-                          trailing: _detail!['rate'] != null
-                              ? _Chip(label: '\$${_detail!['rate']} / ${_detail!['rate_type']}')
-                              : null,
-                          showArrow: false,
-                        ),
-                        const Divider(height: 1, thickness: 1, color: Color(0xFF1E1E2E)),
-                        if (_detail!['estimated_time'] != null) ...[
+                          if ((_detail!['time_logs'] as List?)?.isNotEmpty == true) ...[
+                            _buildSectionHeader('Time Logs'),
+                            const SizedBox(height: 14),
+                            _buildTimeLogs(),
+                            const SizedBox(height: 32),
+                          ],
+
+                          _buildSectionHeader('Task'),
+                          const SizedBox(height: 14),
                           _buildNavRow(
-                            icon: Icons.timer_outlined,
-                            label: 'Estimated time',
-                            trailing: _Chip(label: _detail!['estimated_time']),
+                            icon: Icons.attach_money_rounded,
+                            label: 'Rate',
+                            trailing: _detail!['rate'] != null
+                                ? _Chip(label: '\$${_detail!['rate']} / ${_detail!['rate_type']}')
+                                : null,
                             showArrow: false,
                           ),
                           const Divider(height: 1, thickness: 1, color: Color(0xFF1E1E2E)),
+                          if (_detail!['estimated_time'] != null) ...[
+                            _buildNavRow(
+                              icon: Icons.timer_outlined,
+                              label: 'Estimated time',
+                              trailing: _Chip(label: _detail!['estimated_time']),
+                              showArrow: false,
+                            ),
+                            const Divider(height: 1, thickness: 1, color: Color(0xFF1E1E2E)),
+                          ],
+                          _buildNavRow(
+                            icon: Icons.repeat_rounded,
+                            label: 'Repeating task',
+                            trailing: _Chip(label: _detail!['is_repeating'] == '1' ? 'Yes' : 'No'),
+                            showArrow: false,
+                          ),
                         ],
-                        _buildNavRow(
-                          icon: Icons.repeat_rounded,
-                          label: 'Repeating task',
-                          trailing: _Chip(label: _detail!['is_repeating'] == '1' ? 'Yes' : 'No'),
-                          showArrow: false,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ],
-          ),
-
-          // Floating back + direction buttons
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 12,
-            left: 16,
-            right: 16,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _CircleBtn(icon: Icons.arrow_back_rounded, onTap: () => Navigator.pop(context)),
-                _CircleBtn(icon: Icons.assistant_direction_rounded, onTap: () {}),
+                ],
               ],
             ),
-          ),
 
-          // Bottom bar with timer + start/stop
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: _buildBottomBar(context),
-          ),
-        ],
+            // Floating back + direction buttons
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 12,
+              left: 16,
+              right: 16,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _CircleBtn(
+                    icon: Icons.arrow_back_rounded,
+                    onTap: () async {
+                      final shouldLeave = await _confirmLeaveWhileRunning();
+                      if (shouldLeave && mounted) Navigator.of(context).pop();
+                    },
+                  ),
+                  _CircleBtn(icon: Icons.assistant_direction_rounded, onTap: () {}),
+                ],
+              ),
+            ),
+
+            // Bottom bar with timer + start/stop
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: _buildBottomBar(context),
+            ),
+          ],
+        ),
       ),
     );
   }
+
 
   // ── Map header ────────────────────────────────────────────────────────────
   Widget _buildMapHeader(BuildContext context) {
@@ -732,23 +871,19 @@ TaskRequirementsSection(
     );
   }
 
-
-
-
-
   // ── Status strip ──────────────────────────────────────────────────────────
 Widget _buildStatusStrip() {
   final status = _detail!['my_assignment']?['assignment_status'] ?? widget.task.myAssignment.status;
   final isOverdue = _isOverdue;
-  final isCompleted = _isCompleted;   // ← add
+  final isCompleted = _isCompleted;
 
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
     decoration: BoxDecoration(
       color: isOverdue
           ? const Color(0xFF2A1A1A)
-          : isCompleted                                   // ← add
-              ? const Color(0xFF16281C)                    // ← add: dark green tint
+          : isCompleted
+              ? const Color(0xFF16281C)
               : const Color(0xFF16161F),
       border: const Border(bottom: BorderSide(color: Color(0xFF1E1E2E), width: 1)),
     ),
@@ -757,14 +892,14 @@ Widget _buildStatusStrip() {
         Icon(
           isOverdue
               ? Icons.warning_amber_rounded
-              : isCompleted                                // ← add
-                  ? Icons.check_circle_rounded              // ← add
+              : isCompleted
+                  ? Icons.check_circle_rounded
                   : Icons.assignment_outlined,
           size: 19,
           color: isOverdue
               ? const Color(0xFFFF6B6B)
-              : isCompleted                                 // ← add
-                  ? const Color(0xFF43A047)                  // ← add
+              : isCompleted
+                  ? const Color(0xFF43A047)
                   : const Color(0xFF8A8A9A),
         ),
         const SizedBox(width: 10),
@@ -775,8 +910,8 @@ Widget _buildStatusStrip() {
             fontWeight: FontWeight.w700,
             color: isOverdue
                 ? const Color(0xFFFF6B6B)
-                : isCompleted                                // ← add
-                    ? const Color(0xFF43A047)                  // ← add
+                : isCompleted
+                    ? const Color(0xFF43A047)
                     : Colors.white,
             letterSpacing: 0.6,
           ),
@@ -788,7 +923,6 @@ Widget _buildStatusStrip() {
     ),
   );
 }
-
 
   // ── Task header ───────────────────────────────────────────────────────────
   Widget _buildTaskHeader() {
@@ -882,85 +1016,61 @@ Widget _buildStatusStrip() {
     );
   }
 
+
+
   // ── Action tiles ──────────────────────────────────────────────────────────
   Widget _buildActionTiles() {
-    final sections = (_detail!['template']?['sections'] as List?) ?? [];
-    final totalItems = sections.fold<int>(0, (sum, s) => sum + ((s['items'] as List?)?.length ?? 0));
-    final commentsCount = _detail!['comments_count'] ?? 0;
+    // Only show the requirements button when the task is actively being
+    // worked on (timer running), or when viewing a completed task.
+    if (!_isCompleted && !_isTimerRunning) {
+      return const SizedBox.shrink();
+    }
 
-    return Row(
+    return Column(
       children: [
-        _ActionTile(
-          icon: Icons.rule_rounded,
-          label: 'Requirements',
-          badge: _isCompleted ? '$totalItems/$totalItems' :'${_countFilledItems()}/$totalItems',
-          onTap: () {
-             if (_isCompleted) {
-              
- setState(() => _showRequirements = !_showRequirements);   // ← was showing a snackbar + return
-      return;
-              // ScaffoldMessenger.of(context).showSnackBar(
-              //   SnackBar(
-              //     content: const Row(
-              //       children: [
-              //         Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
-              //         SizedBox(width: 10),
-              //         Expanded(
-              //           child: Text(
-              //             'All requirements submitted',
-              //             style: TextStyle(fontWeight: FontWeight.w500),
-              //           ),
-              //         ),
-              //       ],
-              //     ),
-              //     backgroundColor: const Color.fromARGB(255, 27, 180, 27),
-              //     behavior: SnackBarBehavior.floating,
-              //     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              //   ),
-              // );
-              // return;
-
-
-
-            }
-
-            if (!_isTimerRunning) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Row(
-                    children: [
-                      Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Please start work first to view requirements.',
-                          style: TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                    ],
-                  ),
-                  backgroundColor: const Color(0xFF333344),
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              );
-              return;
-            }
-            setState(() => _showRequirements = !_showRequirements);
-          },
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () {
+              setState(() {
+                _requirementsOpenedOnce = true;
+                _showRequirements = !_showRequirements;
+              });
+            },
+            icon: Icon(_isCompleted ? Icons.visibility_rounded : Icons.rule_rounded, size: 22),
+            label: Text(
+              _isCompleted ? 'View Answers' : 'Tap to Proceed',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF43A047),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
         ),
-        const SizedBox(width: 12),
-        _ActionTile(icon: Icons.attach_file_rounded, label: 'Attachments', onTap: () {}),
-        const SizedBox(width: 12),
-        _ActionTile(
-          icon: Icons.chat_bubble_outline_rounded,
-          label: 'Comments',
-          badge: '$commentsCount',
-          onTap: () {},
-        ),
+
+        // ── Attachments and Comments tiles disabled for now ──
+        // const SizedBox(height: 12),
+        // Row(
+        //   children: [
+        //     _ActionTile(icon: Icons.attach_file_rounded, label: 'Attachments', onTap: () {}),
+        //     const SizedBox(width: 12),
+        //     _ActionTile(
+        //       icon: Icons.chat_bubble_outline_rounded,
+        //       label: 'Comments',
+        //       badge: '${_detail!['comments_count'] ?? 0}',
+        //       onTap: () {},
+        //     ),
+        //   ],
+        // ),
       ],
     );
   }
+
+
 
   // ── Session summary ───────────────────────────────────────────────────────
   Widget _buildSessionSummary() {
@@ -1183,9 +1293,10 @@ Widget _buildStatusStrip() {
 
   // ── Bottom bar ────────────────────────────────────────────────────────────
   Widget _buildBottomBar(BuildContext context) {
-    if (_isCompleted) {
-    return const SizedBox.shrink();   // ← no Start/Stop bar at all for completed tasks
-  }
+      print('DEBUG _buildBottomBar → completedResolved: $_completedResolved, isCompleted: $_isCompleted');
+    if (!_completedResolved || _isCompleted) {
+      return const SizedBox.shrink();
+    }
 
     final bottomPad = MediaQuery.of(context).padding.bottom;
 
