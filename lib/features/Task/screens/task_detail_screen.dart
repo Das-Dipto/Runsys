@@ -5,6 +5,7 @@ import '../../Api/api_controller.dart';
 import '../../Models/task_model.dart';
 import '../../Home/Screens/home_screen.dart';
 import './../widgets/task_sections_acordion.dart';
+import './../widgets/top_message.dart';
 
 class TaskDetailScreen extends StatefulWidget {
   final TaskModel task;
@@ -118,26 +119,9 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
     final incomplete = _taskSections.where((s) => s['is_complete'] != true).toList();
     if (incomplete.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Row(
-            children: [
-              Icon(Icons.info_outline_rounded, color: Colors.white, size: 18),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Requirements need to be filled',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
-              ),
-            ],
-          ),
-          backgroundColor: const Color(0xFFFF6B6B),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-      setState(() => _showRequirements = true);
+      
+TopMessage.warning(context, 'Requirements need to be filled');
+      // setState(() => _showRequirements = true);
       await _accordionKey.currentState?.goToNextIncomplete();
       return;
     }
@@ -208,9 +192,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
 
                           if (result['success'] != true) {
                             Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(result['message'] ?? 'Submission failed')),
-                            );
+                            TopMessage.error(context, result['message'] ?? 'Submission failed');
                             return;
                           }
 
@@ -249,7 +231,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
     );
   }
 
-    Future<void> _pollSubmitStatus(String jobId, {int maxAttempts = 15}) async {
+  Future<void> _pollSubmitStatus(String jobId, {int maxAttempts = 15}) async {
     if (mounted) {
       showDialog(
         context: context,
@@ -264,18 +246,14 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       if (status['code'] == 400) {
         if (!mounted) return;
         Navigator.pop(context); // close loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(status['message'] ?? 'Task already submitted.')),
-        );
+        TopMessage.warning(context, status['message'] ?? 'Task already submitted.');
         return; // do not retry
       }
 
       if (status['code'] == 403) {
         if (!mounted) return;
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(status['message'] ?? 'You are not assigned to this task.')),
-        );
+        TopMessage.error(context, status['message'] ?? 'You are not assigned to this task.');
         return;
       }
 
@@ -290,9 +268,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
         if (jobStatus == 'FAILED' || jobStatus == 'ERROR') {
           if (!mounted) return;
           Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(status['data']?['message'] ?? 'Submission failed')),
-          );
+          TopMessage.error(context, status['data']?['message'] ?? 'Submission failed');
           return;
         }
         // else still QUEUED/PROCESSING → keep polling
@@ -301,26 +277,19 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       await Future.delayed(const Duration(seconds: 2));
     }
 
-    // Timed out waiting — leave user on the task screen with an error,
-    // per the failure behavior spec.
+    // Timed out waiting
     if (!mounted) return;
     Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Submission is taking longer than expected. Please check back shortly.')),
-    );
+    TopMessage.warning(
+        context, 'Submission is taking longer than expected. Please check back shortly.');
   }
-
   Future<void> _onSubmitSuccess() async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Task submitted successfully!',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-        backgroundColor: const Color(0xFF43A047),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+
     await _onStopPressed(); // auto-off the timer
+
+      // Shown on the root overlay, so it stays visible on the Home screen too
+  TopMessage.success(context, 'Task submitted successfully!');
+
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const HomeScreen(initialTabIndex: 4)),
@@ -682,56 +651,50 @@ bool get _isOverdue {
 
                           if (_lastTotalFormatted != null || _lastBillable != null)
                             _buildSessionSummary(),
-
-                          // ── Requirements (sections accordion, loaded on demand) ──
-                          if (_requirementsOpenedOnce) ...[
-                            Visibility(
-                              visible: _showRequirements,
-                              maintainState: true,
-                              maintainAnimation: true,
-                              maintainSize: false,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildSectionHeader('Requirements'),
-                                  const SizedBox(height: 14),
-                                  TaskSectionsAccordion(
-                                    key: _accordionKey,
-                                    taskId: widget.task.id,
-                                    readOnly: _isCompleted,
-                                    onProgressChanged: (sections) => setState(() => _taskSections = sections),
-                                  ),
-                                  const SizedBox(height: 20),
-                                  if (!_isCompleted && _isTimerRunning)
-                                    SizedBox(
-                                      width: double.infinity,
-                                      height: 52,
-                                      child: ElevatedButton.icon(
-                                        onPressed: _isSubmittingRequirements ? null : _onSubmitRequirementsPressed,
-                                        icon: _isSubmittingRequirements
-                                            ? const SizedBox(
-                                                width: 20,
-                                                height: 20,
-                                                child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
-                                              )
-                                            : const Icon(Icons.assignment_turned_in_rounded, size: 22),
-                                        label: Text(
-                                          _isSubmittingRequirements ? 'Submitting...' : 'Submit Requirements',
-                                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                                        ),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: const Color(0xFF43A047),
-                                          foregroundColor: Colors.white,
-                                          elevation: 0,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                        ),
+                          // ── Requirements (auto-shown when task is started or completed) ──
+                          if (_isTimerRunning || _isCompleted) ...[
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSectionHeader('Requirements'),
+                                const SizedBox(height: 14),
+                                TaskSectionsAccordion(
+                                  key: _accordionKey,
+                                  taskId: widget.task.id,
+                                  readOnly: _isCompleted,
+                                  onProgressChanged: (sections) => setState(() => _taskSections = sections),
+                                ),
+                                const SizedBox(height: 20),
+                                if (!_isCompleted && _isTimerRunning)
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 52,
+                                    child: ElevatedButton.icon(
+                                      onPressed: _isSubmittingRequirements ? null : _onSubmitRequirementsPressed,
+                                      icon: _isSubmittingRequirements
+                                          ? const SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
+                                            )
+                                          : const Icon(Icons.assignment_turned_in_rounded, size: 22),
+                                      label: Text(
+                                        _isSubmittingRequirements ? 'Submitting...' : 'Submit Requirements',
+                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF43A047),
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                                       ),
                                     ),
-                                  const SizedBox(height: 32),
-                                ],
-                              ),
+                                  ),
+                                const SizedBox(height: 32),
+                              ],
                             ),
                           ],
+
 
                           _buildSectionHeader('Comments'),
                           const SizedBox(height: 14),
@@ -1020,54 +983,9 @@ Widget _buildStatusStrip() {
 
   // ── Action tiles ──────────────────────────────────────────────────────────
   Widget _buildActionTiles() {
-    // Only show the requirements button when the task is actively being
-    // worked on (timer running), or when viewing a completed task.
-    if (!_isCompleted && !_isTimerRunning) {
+      // "Tap to Proceed" / "View Answers" button removed.
+      // Requirements now open automatically (see build()).
       return const SizedBox.shrink();
-    }
-
-    return Column(
-      children: [
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: () {
-              setState(() {
-                _requirementsOpenedOnce = true;
-                _showRequirements = !_showRequirements;
-              });
-            },
-            icon: Icon(_isCompleted ? Icons.visibility_rounded : Icons.rule_rounded, size: 22),
-            label: Text(
-              _isCompleted ? 'View Answers' : 'Tap to Proceed',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF43A047),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            ),
-          ),
-        ),
-
-        // ── Attachments and Comments tiles disabled for now ──
-        // const SizedBox(height: 12),
-        // Row(
-        //   children: [
-        //     _ActionTile(icon: Icons.attach_file_rounded, label: 'Attachments', onTap: () {}),
-        //     const SizedBox(width: 12),
-        //     _ActionTile(
-        //       icon: Icons.chat_bubble_outline_rounded,
-        //       label: 'Comments',
-        //       badge: '${_detail!['comments_count'] ?? 0}',
-        //       onTap: () {},
-        //     ),
-        //   ],
-        // ),
-      ],
-    );
   }
 
 

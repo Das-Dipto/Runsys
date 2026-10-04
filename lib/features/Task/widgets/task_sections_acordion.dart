@@ -88,29 +88,40 @@ class TaskSectionsAccordionState extends State<TaskSectionsAccordion> {
     }
   }
 
-  Future<void> _loadSections() async {
-    setState(() {
-      _sectionsLoading = true;
-      _sectionsError = null;
-    });
-    final result = await ApiController.getTaskSections(widget.taskId);
-    if (!mounted) return;
-    if (result['success'] == true) {
-      final data = List<Map<String, dynamic>>.from(
-          (result['data'] as List).map((e) => Map<String, dynamic>.from(e)));
-      setState(() {
-        _sections = data;
-        _sectionsLoading = false;
-      });
-      widget.onProgressChanged?.call(_sections);
-    } else {
-      setState(() {
-        _sectionsError = result['message'];
-        _sectionsLoading = false;
-      });
-    }
-  }
+Future<void> _loadSections() async {
+  setState(() {
+    _sectionsLoading = true;
+    _sectionsError = null;
+  });
+  final result = await ApiController.getTaskSections(widget.taskId);
+  if (!mounted) return;
+  if (result['success'] == true) {
+    final data = List<Map<String, dynamic>>.from(
+        (result['data'] as List).map((e) => Map<String, dynamic>.from(e)))
+      // hide sections that have no items/requirements
+      ..removeWhere((s) => ((s['item_count'] as num?)?.toInt() ?? 0) == 0)
+      ..sort((a, b) => ((a['display_order'] as num?)?.toInt() ?? 0)
+          .compareTo((b['display_order'] as num?)?.toInt() ?? 0));
 
+    setState(() {
+      _sections = data;
+      _sectionsLoading = false;
+    });
+    widget.onProgressChanged?.call(_sections);
+
+    // auto-open the first section
+    if (_sections.isNotEmpty && _expandedSectionIds.isEmpty) {
+      final firstId = (_sections.first['id'] as num).toInt();
+      await _toggleSection(firstId);
+    }
+  } else {
+    setState(() {
+      _sectionsError = result['message'];
+      _sectionsLoading = false;
+    });
+  }
+}
+  
   Future<void> _toggleSection(int sectionId) async {
     setState(() {
       if (_expandedSectionIds.contains(sectionId)) {
@@ -138,8 +149,11 @@ class TaskSectionsAccordionState extends State<TaskSectionsAccordion> {
     final sectionsResult = await ApiController.getTaskSections(widget.taskId);
     if (!mounted) return;
     if (sectionsResult['success'] == true) {
-      final data = List<Map<String, dynamic>>.from(
-          (sectionsResult['data'] as List).map((e) => Map<String, dynamic>.from(e)));
+    final data = List<Map<String, dynamic>>.from(
+        (sectionsResult['data'] as List).map((e) => Map<String, dynamic>.from(e)))
+      ..removeWhere((s) => ((s['item_count'] as num?)?.toInt() ?? 0) == 0)
+      ..sort((a, b) => ((a['display_order'] as num?)?.toInt() ?? 0)
+          .compareTo((b['display_order'] as num?)?.toInt() ?? 0));
       setState(() => _sections = data);
       widget.onProgressChanged?.call(_sections);
     }
