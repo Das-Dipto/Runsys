@@ -6,6 +6,8 @@ import '../../Models/task_model.dart';
 import '../../Home/Screens/home_screen.dart';
 import './../widgets/task_sections_acordion.dart';
 import './../widgets/top_message.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 
 class TaskDetailScreen extends StatefulWidget {
   final TaskModel task;
@@ -15,7 +17,7 @@ class TaskDetailScreen extends StatefulWidget {
   State<TaskDetailScreen> createState() => _TaskDetailScreenState();
 }
 
-class _TaskDetailScreenState extends State<TaskDetailScreen> {
+class _TaskDetailScreenState extends State<TaskDetailScreen> with WidgetsBindingObserver {
   Map<String, dynamic>? _detail;
   bool _isLoading = true;
   String? _error;
@@ -27,6 +29,7 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   int  _currentLogId   = -1;
   Duration _elapsed    = Duration.zero;
   Timer?   _ticker;
+    DateTime? _timerStartedAt;
 
   // Last stop summary
   String? _lastTotalFormatted;
@@ -44,21 +47,125 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   final GlobalKey<TaskSectionsAccordionState> _accordionKey = GlobalKey<TaskSectionsAccordionState>();
 
   @override
-  void initState() {
-    super.initState();
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-    ));
-    _loadDetail();
-  }
+@override
+void initState() {
+  super.initState();
+  WidgetsBinding.instance.addObserver(this);   // ← notun
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+  ));
+  _loadDetail();
+}
 
   @override
-  void dispose() {
-    _ticker?.cancel();
-    super.dispose();
+void dispose() {
+  WidgetsBinding.instance.removeObserver(this);   // ← notun
+  _ticker?.cancel();
+  super.dispose();
+}
+
+@override
+void didChangeAppLifecycleState(AppLifecycleState state) {
+  // Screen unlock / app foreground e ashle server theke timer re-sync
+  if (state == AppLifecycleState.resumed && !_isLoading) {
+    _syncTimerFromServer();
+  }
+}
+
+/// Server theke timer state anche. Return true jodi ei task-er timer active thake.
+Future<bool> _syncTimerFromServer() async {
+  final result = await ApiController.getTaskDetail(widget.task.id);
+  if (!mounted) return false;
+
+  // Net nai / request fail → cache theke cholte thako
+  if (result['success'] != true) {
+    if (!_isTimerRunning) return await _restoreTimerFromCache();
+    return _isTimerRunning;
   }
 
+  final data = result['data'];
+  print('DEBUG sync → timer: ${data['timer']}');
+print('DEBUG sync → active_time_log: ${data['active_time_log']}');
+print('DEBUG sync → time_logs: ${data['time_logs']}');
+  final timer = data['timer'];
+  final isActive = data['is_timer_active'] == true || timer?['is_active'] == true;
+  final activeLog = data['active_time_log'];
+  final logId = (activeLog?['id'] as num?)?.toInt() ??
+      (timer?['active_time_log_id'] as num?)?.toInt();
+
+  if (isActive && logId != null) {
+    final serverElapsed = _parseActiveElapsed(data);
+
+    // Server elapsed 0 dile cache-er shuru-r shomoy use koro
+    Duration elapsed = serverElapsed;
+    if (serverElapsed == Duration.zero) {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_timerCacheKey);
+      final cachedLogId = prefs.getInt(_timerLogCacheKey);
+      final cachedStart = DateTime.tryParse(raw ?? '');
+      if (cachedStart != null && cachedLogId == logId) {
+        elapsed = DateTime.now().difference(cachedStart);
+      }
+    }
+
+    if (!mounted) return false;
+    setState(() {
+      _detail = data;
+      _isTimerRunning = true;
+      _currentLogId = logId;
+      _elapsed = elapsed.isNegative ? Duration.zero : elapsed;
+    });
+    _startTicker();
+    return true;
+  }
+
+  // Server successfully bolche timer nai → local state o cache clear
+  if (_isTimerRunning) {
+    _ticker?.cancel();
+    setState(() {
+      _isTimerRunning = false;
+      _currentLogId = -1;
+      _elapsed = Duration.zero;
+    });
+  }
+  await _clearTimerCache();
+  return false;
+}
+
+
+/// Works out how long the active timer has been running.
+/// 1) uses elapsed_seconds if the server sends it (> 0)
+/// 2) otherwise calculates from the active log's start_time
+/// 3) otherwise looks for the open log (end_time == null) in time_logs
+Duration _parseActiveElapsed(Map data) {
+  final timer = data['timer'];
+  final activeLog = data['active_time_log'];
+
+  final secs = (activeLog?['elapsed_seconds'] as num?)?.toInt() ??
+      (timer?['elapsed_seconds'] as num?)?.toInt() ??
+      0;
+  if (secs > 0) return Duration(seconds: secs);
+
+  String? startRaw =
+      (activeLog?['start_time'] ?? timer?['start_time'])?.toString();
+
+  if (startRaw == null) {
+    final logs = (data['time_logs'] as List?) ?? [];
+    for (final log in logs) {
+      if (log['end_time'] == null && log['start_time'] != null) {
+        startRaw = log['start_time'].toString();
+        break;
+      }
+    }
+  }
+
+  final start = DateTime.tryParse(startRaw ?? '')?.toLocal();
+  if (start == null) return Duration.zero;
+
+  final diff = DateTime.now().difference(start);
+  return diff.isNegative ? Duration.zero : diff;
+}
 
   // ── Data loading ──────────────────────────────────────────────────────────
   Future<void> _loadDetail() async {
@@ -95,20 +202,32 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
       final activeLog = data['active_time_log'];
       final logId = (activeLog?['id'] as num?)?.toInt() ??
           (timer?['active_time_log_id'] as num?)?.toInt();
-      final elapsedSeconds = (activeLog?['elapsed_seconds'] as num?)?.toInt() ??
-          (timer?['elapsed_seconds'] as num?)?.toInt() ??
-          0;
+ 
 
-      print('DEBUG timer parse → isActive: $isActive, logId: $logId, elapsed: $elapsedSeconds'); // TEMP
+      print('DEBUG timer parse → isActive: $isActive, logId: $logId'); // TEMP
 
-      if (isActive && logId != null) {
-        setState(() {
-          _isTimerRunning = true;
-          _currentLogId = logId;
-          _elapsed = Duration(seconds: elapsedSeconds);
-        });
-        _startTicker();
-      }
+if (isActive && logId != null) {
+  Duration elapsed = _parseActiveElapsed(data);
+
+  final prefs = await SharedPreferences.getInstance();
+  final cachedStart = DateTime.tryParse(prefs.getString(_timerCacheKey) ?? '');
+  final cachedLogId = prefs.getInt(_timerLogCacheKey);
+
+  print('DEBUG load → serverElapsed: $elapsed, logId: $logId, cachedLogId: $cachedLogId, cachedStart: $cachedStart');
+
+  // Cache-er shuru-r shomoy shobchhe bhorshar joggo, tai age oita use koro
+  if (cachedStart != null && cachedLogId == logId) {
+    elapsed = DateTime.now().difference(cachedStart);
+  }
+
+  if (!mounted) return;
+  setState(() {
+    _isTimerRunning = true;
+    _currentLogId = logId;
+    _elapsed = elapsed.isNegative ? Duration.zero : elapsed;
+  });
+  _startTicker();
+}
     } else {
       setState(() { _error = result['message']; _isLoading = false; });
     }
@@ -346,14 +465,61 @@ TopMessage.warning(context, 'Requirements need to be filled');
     }
   }
 
+
+String get _timerCacheKey => 'timer_start_${widget.task.id}';
+String get _timerLogCacheKey => 'timer_log_${widget.task.id}';
+
+/// Timer-er shuru-r shomoy phone-e save kore rakhe
+Future<void> _saveTimerCache(DateTime startedAt, int logId) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString(_timerCacheKey, startedAt.toIso8601String());
+  await prefs.setInt(_timerLogCacheKey, logId);
+}
+
+/// Timer bondho hole cache muche dao
+Future<void> _clearTimerCache() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.remove(_timerCacheKey);
+  await prefs.remove(_timerLogCacheKey);
+}
+
+/// Cache theke timer restore kore. Return true jodi pawa jay.
+Future<bool> _restoreTimerFromCache() async {
+  final prefs = await SharedPreferences.getInstance();
+  final raw = prefs.getString(_timerCacheKey);
+  final logId = prefs.getInt(_timerLogCacheKey);
+  if (raw == null || logId == null) return false;
+
+  final startedAt = DateTime.tryParse(raw);
+  if (startedAt == null) return false;
+
+  final diff = DateTime.now().difference(startedAt);
+  if (!mounted) return false;
+  setState(() {
+    _isTimerRunning = true;
+    _currentLogId = logId;
+    _elapsed = diff.isNegative ? Duration.zero : diff;
+  });
+  _startTicker();
+  return true;
+}
+
+
+
   // ── Timer helpers ─────────────────────────────────────────────────────────
 
-  void _startTicker() {
-    _ticker?.cancel();
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() { _elapsed += const Duration(seconds: 1); });
-    });
+void _startTicker() {
+  _ticker?.cancel();
+  _timerStartedAt = DateTime.now().subtract(_elapsed);
+  if (_currentLogId != -1) {
+    _saveTimerCache(_timerStartedAt!, _currentLogId);
   }
+  _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+    if (mounted && _timerStartedAt != null) {
+      setState(() => _elapsed = DateTime.now().difference(_timerStartedAt!));
+    }
+  });
+}
 
   String _formatElapsed(Duration d) {
     final h = d.inHours;
@@ -406,7 +572,15 @@ TopMessage.warning(context, 'Requirements need to be filled');
             message.toLowerCase().contains('running') ||
             message.toLowerCase().contains('stop');
 
-        if (isActiveTaskBlock) {
+               if (isActiveTaskBlock) {
+          // Age check koro: timer ki ei task-ei cholche? Thakle resume koro.
+          final resumed = await _syncTimerFromServer();
+          if (!mounted) return;
+          if (resumed) {
+            TopMessage.success(context, 'Timer resumed');
+            _accordionKey.currentState?.refreshAll();
+            return;
+          }
           showDialog(
             context: context,
             builder: (_) => AlertDialog(
@@ -467,6 +641,7 @@ TopMessage.warning(context, 'Requirements need to be filled');
       final data = result['data'];
 
       _ticker?.cancel();
+      _clearTimerCache();
 
       setState(() {
         _isTimerRunning = false;
