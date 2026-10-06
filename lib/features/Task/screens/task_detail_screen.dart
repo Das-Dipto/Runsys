@@ -46,7 +46,8 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> with WidgetsBinding
   List<Map<String, dynamic>> _taskSections = [];
   final GlobalKey<TaskSectionsAccordionState> _accordionKey = GlobalKey<TaskSectionsAccordionState>();
 
-  @override
+  bool get _hasRequirements => _taskSections.isNotEmpty;
+
 @override
 void initState() {
   super.initState();
@@ -73,6 +74,40 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
   }
 }
 
+
+/// Start API-r moto response diye timer restore kore.
+/// Return true jodi timer set kora gelo.
+Future<bool> _resumeViaStartApi() async {
+  final result = await ApiController.startTimeLog(widget.task.id);
+  if (!mounted) return false;
+  print('DEBUG resume via start → $result');
+
+  if (result['success'] == true) {
+    final data = result['data'];
+    final logId = (data['id'] as num).toInt();
+
+    final tt = data['time_tracking'];
+    final totalMinutes = (tt?['total_time_minutes'] as num?)?.toInt() ?? 0;
+    final totalSeconds = (tt?['total_time_seconds'] as num?)?.toInt() ?? 0;
+    final baseElapsed = Duration(minutes: totalMinutes, seconds: totalSeconds);
+
+    // Notun session → ager cache muche dao, jate notun start time save hoy
+    await _clearTimerCache();
+
+    setState(() {
+      _isTimerRunning = true;
+      _currentLogId = logId;
+      _elapsed = baseElapsed;
+    });
+    _startTicker();
+    _accordionKey.currentState?.refreshAll();
+    return true;
+  }
+
+  // "Already exists" → server-e timer cholche, cache theke restore koro
+  return await _restoreTimerFromCache();
+}
+
 /// Server theke timer state anche. Return true jodi ei task-er timer active thake.
 Future<bool> _syncTimerFromServer() async {
   final result = await ApiController.getTaskDetail(widget.task.id);
@@ -85,9 +120,6 @@ Future<bool> _syncTimerFromServer() async {
   }
 
   final data = result['data'];
-  print('DEBUG sync → timer: ${data['timer']}');
-print('DEBUG sync → active_time_log: ${data['active_time_log']}');
-print('DEBUG sync → time_logs: ${data['time_logs']}');
   final timer = data['timer'];
   final isActive = data['is_timer_active'] == true || timer?['is_active'] == true;
   final activeLog = data['active_time_log'];
@@ -95,19 +127,8 @@ print('DEBUG sync → time_logs: ${data['time_logs']}');
       (timer?['active_time_log_id'] as num?)?.toInt();
 
   if (isActive && logId != null) {
-    final serverElapsed = _parseActiveElapsed(data);
+    Duration elapsed = await _computeElapsed(data);
 
-    // Server elapsed 0 dile cache-er shuru-r shomoy use koro
-    Duration elapsed = serverElapsed;
-    if (serverElapsed == Duration.zero) {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_timerCacheKey);
-      final cachedLogId = prefs.getInt(_timerLogCacheKey);
-      final cachedStart = DateTime.tryParse(raw ?? '');
-      if (cachedStart != null && cachedLogId == logId) {
-        elapsed = DateTime.now().difference(cachedStart);
-      }
-    }
 
     if (!mounted) return false;
     setState(() {
@@ -120,7 +141,7 @@ print('DEBUG sync → time_logs: ${data['time_logs']}');
     return true;
   }
 
-  // Server successfully bolche timer nai → local state o cache clear
+  // Server bole timer nai → local state o cache clear
   if (_isTimerRunning) {
     _ticker?.cancel();
     setState(() {
@@ -133,40 +154,51 @@ print('DEBUG sync → time_logs: ${data['time_logs']}');
   return false;
 }
 
+/// Server-er time string parse kore local DateTime dey.
+/// Timezone (Z ba +06:00) na thakle UTC dhore ney.
+DateTime? _parseServerTime(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return null;
+  var s = raw.trim().replaceFirst(' ', 'T');
+  final hasZone = RegExp(r'(Z|[+-]\d{2}:?\d{2})$').hasMatch(s);
+  if (!hasZone) s = '${s}Z';
+  return DateTime.tryParse(s)?.toLocal();
+}
 
 /// Works out how long the active timer has been running.
 /// 1) uses elapsed_seconds if the server sends it (> 0)
 /// 2) otherwise calculates from the active log's start_time
 /// 3) otherwise looks for the open log (end_time == null) in time_logs
+/// Timer = ager shob completed session-er total + cholte thaka session-er elapsed
 Duration _parseActiveElapsed(Map data) {
-  final timer = data['timer'];
-  final activeLog = data['active_time_log'];
+  final timer = data['timer'] as Map?;
+  if (timer == null) return Duration.zero;
 
-  final secs = (activeLog?['elapsed_seconds'] as num?)?.toInt() ??
-      (timer?['elapsed_seconds'] as num?)?.toInt() ??
-      0;
-  if (secs > 0) return Duration(seconds: secs);
+  final totalMinutes = (timer['total_time_minutes'] as num?)?.toInt() ?? 0;
+  final currentSeconds = (timer['elapsed_seconds'] as num?)?.toInt() ?? 0;
 
-  String? startRaw =
-      (activeLog?['start_time'] ?? timer?['start_time'])?.toString();
-
-  if (startRaw == null) {
-    final logs = (data['time_logs'] as List?) ?? [];
-    for (final log in logs) {
-      if (log['end_time'] == null && log['start_time'] != null) {
-        startRaw = log['start_time'].toString();
-        break;
-      }
+  return Duration(minutes: totalMinutes) + Duration(seconds: currentSeconds);
+}
+/// Current session-er start time (server data theke)
+DateTime? _parseActiveStart(Map data) {
+  String? raw;
+  final logs = (data['time_logs'] as List?) ?? [];
+  for (final log in logs) {
+    if (log['end_time'] == null && log['start_time'] != null) {
+      raw = log['start_time'].toString();
+      break;
     }
   }
-
-  final start = DateTime.tryParse(startRaw ?? '')?.toLocal();
-  if (start == null) return Duration.zero;
-
-  final diff = DateTime.now().difference(start);
-  return diff.isNegative ? Duration.zero : diff;
+  raw ??= (data['active_time_log']?['start_time'] ??
+          data['timer']?['start_time'])
+      ?.toString();
+  return _parseServerTime(raw);
 }
 
+/// Saved base thakle: base + (ekhon - current session start).
+/// Na thakle purono hishab (_parseActiveElapsed) e fallback.
+Future<Duration> _computeElapsed(Map data) async {
+  return _parseActiveElapsed(data);
+}
   // ── Data loading ──────────────────────────────────────────────────────────
   Future<void> _loadDetail() async {
     setState(() { _isLoading = true; _error = null; });
@@ -175,6 +207,10 @@ Duration _parseActiveElapsed(Map data) {
 
     if (result['success'] == true) {
       final data = result['data'];
+
+      print('##### DETAIL KEYS → ${data.keys.toList()}');
+      print('##### TIMER → ${data['timer']}');
+print('##### MY_ASSIGNMENT → ${data['my_assignment']}');
 
        final rawStatus = data['my_assignment']?['assignment_status'] ??
           data['my_assignment']?['status'] ??
@@ -202,23 +238,17 @@ Duration _parseActiveElapsed(Map data) {
       final activeLog = data['active_time_log'];
       final logId = (activeLog?['id'] as num?)?.toInt() ??
           (timer?['active_time_log_id'] as num?)?.toInt();
+
+      print('##### LOAD → isActive: $isActive, logId: $logId, time_logs count: ${(data['time_logs'] as List?)?.length}');
+      print('##### LOAD → time_logs: ${data['time_logs']}');
  
 
       print('DEBUG timer parse → isActive: $isActive, logId: $logId'); // TEMP
 
 if (isActive && logId != null) {
-  Duration elapsed = _parseActiveElapsed(data);
+  Duration elapsed = await _computeElapsed(data);
 
-  final prefs = await SharedPreferences.getInstance();
-  final cachedStart = DateTime.tryParse(prefs.getString(_timerCacheKey) ?? '');
-  final cachedLogId = prefs.getInt(_timerLogCacheKey);
 
-  print('DEBUG load → serverElapsed: $elapsed, logId: $logId, cachedLogId: $cachedLogId, cachedStart: $cachedStart');
-
-  // Cache-er shuru-r shomoy shobchhe bhorshar joggo, tai age oita use koro
-  if (cachedStart != null && cachedLogId == logId) {
-    elapsed = DateTime.now().difference(cachedStart);
-  }
 
   if (!mounted) return;
   setState(() {
@@ -232,6 +262,12 @@ if (isActive && logId != null) {
       setState(() { _error = result['message']; _isLoading = false; });
     }
   }
+
+
+
+
+
+
 
   Future<void> _onSubmitRequirementsPressed() async {
     if (_isSubmittingRequirements) return;
@@ -402,19 +438,19 @@ TopMessage.warning(context, 'Requirements need to be filled');
     TopMessage.warning(
         context, 'Submission is taking longer than expected. Please check back shortly.');
   }
-  Future<void> _onSubmitSuccess() async {
 
-    await _onStopPressed(); // auto-off the timer
 
-      // Shown on the root overlay, so it stays visible on the Home screen too
+Future<void> _onSubmitSuccess() async {
+  await _onStopPressed(); // auto-off the timer
+  if (!mounted) return;
+
   TopMessage.success(context, 'Task submitted successfully!');
 
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const HomeScreen(initialTabIndex: 4)),
-      (route) => false,
-    );
-  }
+  Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute(builder: (_) => const HomeScreen(initialTabIndex: 4)),
+    (route) => false,
+  );
+}
 
   Widget _dialogField(String label, TextEditingController ctrl, String hint) {
     return Column(
@@ -447,6 +483,9 @@ TopMessage.warning(context, 'Requirements need to be filled');
     if (!mounted) return;
     if (result['success'] == true) {
       final data = result['data'];
+
+      
+
       final logId = data['id'] as int;
       final startTime = DateTime.tryParse(data['start_time'] ?? '')?.toLocal();
       final alreadyElapsed = startTime != null
@@ -481,6 +520,20 @@ Future<void> _clearTimerCache() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.remove(_timerCacheKey);
   await prefs.remove(_timerLogCacheKey);
+  await prefs.remove(_timerBaseCacheKey);
+}
+
+String get _timerBaseCacheKey => 'timer_base_${widget.task.id}';
+
+/// Ager shob session-er total (seconds), Start-er shomoy server theke pawa
+Future<void> _saveBaseSeconds(int seconds) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setInt(_timerBaseCacheKey, seconds);
+}
+
+Future<int?> _loadBaseSeconds() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getInt(_timerBaseCacheKey);
 }
 
 /// Cache theke timer restore kore. Return true jodi pawa jay.
@@ -533,7 +586,8 @@ void _startTicker() {
 
     setState(() => {
       _isStartLoading = true,
-      _showRequirements = false
+      _showRequirements = false,
+      
     });
 
     final result = await ApiController.startTimeLog(widget.task.id);
@@ -548,6 +602,7 @@ void _startTicker() {
       final totalMinutes = (timeTracking?['total_time_minutes'] as num?)?.toInt() ?? 0;
       final totalSeconds = (timeTracking?['total_time_seconds'] as num?)?.toInt() ?? 0;
       final baseElapsed = Duration(minutes: totalMinutes, seconds: totalSeconds);
+      await _saveBaseSeconds(baseElapsed.inSeconds);
 
       setState(() {
         _isTimerRunning = true;
@@ -731,7 +786,7 @@ void _startTicker() {
 
 String _formatDate(String? iso) {
   if (iso == null) return '—';
-  final dt = DateTime.tryParse(iso)?.toLocal();
+  final dt = _parseServerTime(iso);
   if (dt == null) return '—';
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const days   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -740,7 +795,7 @@ String _formatDate(String? iso) {
 
   String _formatTime(String? iso) {
     if (iso == null) return '—';
-    final dt = DateTime.tryParse(iso)?.toLocal();
+    final dt = _parseServerTime(iso);
     if (dt == null) return '—';
     final h  = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
     final m  = dt.minute.toString().padLeft(2, '0');
@@ -840,7 +895,7 @@ bool get _isOverdue {
                                   onProgressChanged: (sections) => setState(() => _taskSections = sections),
                                 ),
                                 const SizedBox(height: 20),
-                                if (!_isCompleted && _isTimerRunning)
+                                if (!_isCompleted && _isTimerRunning && _hasRequirements)
                                   SizedBox(
                                     width: double.infinity,
                                     height: 52,
@@ -1386,7 +1441,7 @@ Widget _buildStatusStrip() {
 
   // ── Bottom bar ────────────────────────────────────────────────────────────
   Widget _buildBottomBar(BuildContext context) {
-      print('DEBUG _buildBottomBar → completedResolved: $_completedResolved, isCompleted: $_isCompleted');
+      
     if (!_completedResolved || _isCompleted) {
       return const SizedBox.shrink();
     }

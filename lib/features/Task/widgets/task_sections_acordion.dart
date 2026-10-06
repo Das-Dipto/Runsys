@@ -397,7 +397,7 @@ Future<void> _loadSections() async {
     if (_sections.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 24),
-        child: Text('No requirements for this task.', style: TextStyle(color: _textSec)),
+        child: Text('No requirements found for this task, Kindly contact your admin.', style: TextStyle(color: _textSec)),
       );
     }
 
