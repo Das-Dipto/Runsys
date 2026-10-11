@@ -752,6 +752,11 @@ Positioned(
                             onTap: _showChangePasswordDialog,
                             contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
                           ),
+                           _InfoRow(
+                              icon: Icons.info_outline_rounded,
+                              label: 'App version',
+                              value: '1.0.8',
+                            ),
                         ],
                       ),
                     ),

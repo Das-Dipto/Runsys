@@ -273,34 +273,33 @@ Future<void> _loadSections() async {
     /// Converts a /save-item request payload into the same shape /responses
   /// returns, so we can cache it locally the moment the user answers —
   /// without waiting for (or re-fetching from) the server.
-  Map<String, dynamic> _normalizePayloadToAnswer(Map<String, dynamic> payload) {
-    if (payload.containsKey('answer_yes_no')) {
-      return {'answer_text': payload['answer_yes_no']};
-    }
-    if (payload.containsKey('rating_value')) {
-      return {'answer_text': payload['rating_value'].toString()};
-    }
-    if (payload.containsKey('count_value')) {
-      return {'answer_text': payload['count_value'].toString()};
-    }
-    if (payload.containsKey('checklist_responses')) {
-      final options = <String, dynamic>{};
-      for (final opt in (payload['checklist_responses'] as List)) {
-        options[opt['option_id'].toString()] = {
-          'checked': opt['checked'] == true,
-          'files': opt['files'] ?? [],
-        };
-      }
-      return {'options': options};
-    }
-    // TEXT / REPORT / CONDITION / PHOTO all carry answer_text and/or files directly.
-    return {
-      if (payload.containsKey('answer_text')) 'answer_text': payload['answer_text'],
-      if (payload.containsKey('files')) 'files': payload['files'],
-    };
+Map<String, dynamic> _normalizePayloadToAnswer(Map<String, dynamic> payload) {
+  final files = payload['files'] ?? [];
+
+  if (payload.containsKey('answer_yes_no')) {
+    return {'answer_text': payload['answer_yes_no'], 'files': files};
   }
-
-
+  if (payload.containsKey('rating_value')) {
+    return {'answer_text': payload['rating_value'].toString(), 'files': files};
+  }
+  if (payload.containsKey('count_value')) {
+    return {'answer_text': payload['count_value'].toString(), 'files': files};
+  }
+  if (payload.containsKey('checklist_responses')) {
+    final options = <String, dynamic>{};
+    for (final opt in (payload['checklist_responses'] as List)) {
+      options[opt['option_id'].toString()] = {
+        'checked': opt['checked'] == true,
+        'files': opt['files'] ?? [],
+      };
+    }
+    return {'options': options, 'files': files};
+  }
+  return {
+    if (payload.containsKey('answer_text')) 'answer_text': payload['answer_text'],
+    if (payload.containsKey('files')) 'files': payload['files'],
+  };
+}
 
     /// Waits until all in-flight /save-item calls resolve (success or
   /// failure), so Submit never races an unsent answer. Times out as a
@@ -598,70 +597,80 @@ class _ItemCardState extends State<_ItemCard> {
     super.dispose();
   }
 
+void _prefill() {
+  final answer = widget.existingAnswer;
+  if (answer == null) return;
+  _isSaved = true;
 
+  // Files: restore for ALL types (server may return maps or plain URL strings)
+  final rawFiles = (answer['files'] as List?) ?? const [];
+  _files = rawFiles.map<Map<String, dynamic>>((f) {
+    if (f is Map) return Map<String, dynamic>.from(f);
+    return {'cdn_url': f.toString()};
+  }).toList();
 
-  void _prefill() {
-    final answer = widget.existingAnswer;
-    if (answer == null) return;
-    _isSaved = true;
-
-    switch (_type) {
-      case 'YES_NO':
-        final v = (answer['answer_text'] ?? '').toString().trim().toUpperCase();
-        _yesNo = v == 'YES' ? 'YES' : (v == 'NO' ? 'NO' : null);
-        break;
-      case 'RATING':
-      case 'COUNT':
-      case 'TEXT':
-        _textController.text = (answer['answer_text'] ?? '').toString();
-        break;
-      case 'REPORT':
-      case 'CONDITION':
-      case 'PHOTO':
-        _textController.text = (answer['answer_text'] ?? '').toString();
-        final rawFiles = (answer['files'] as List?) ?? const [];
-        _files = rawFiles.map((f) => Map<String, dynamic>.from(f as Map)).toList();
-        break;
-      case 'CHECKLIST':
-        final options = (answer['options'] as Map?) ?? {};
-        options.forEach((key, value) {
-          final optId = int.tryParse(key.toString());
-          if (optId != null && value is Map) {
-            _checkedOptions[optId] = value['checked'] == true;
+  switch (_type) {
+    case 'YES_NO':
+      final v = (answer['answer_text'] ?? '').toString().trim().toUpperCase();
+      _yesNo = v == 'YES' ? 'YES' : (v == 'NO' ? 'NO' : null);
+      break;
+    case 'RATING':
+    case 'COUNT':
+    case 'TEXT':
+    case 'REPORT':
+    case 'CONDITION':
+    case 'PHOTO':
+      _textController.text = (answer['answer_text'] ?? '').toString();
+      break;
+    case 'CHECKLIST':
+      final options = (answer['options'] as Map?) ?? {};
+      options.forEach((key, value) {
+        final optId = int.tryParse(key.toString());
+        if (optId != null && value is Map) {
+          _checkedOptions[optId] = value['checked'] == true;
+          // fallback: server may store files per option
+          if (_files.isEmpty && value['files'] is List) {
+            for (final f in value['files']) {
+              _files.add(f is Map ? Map<String, dynamic>.from(f) : {'cdn_url': f.toString()});
+            }
           }
-        });
-        break;
-    }
+        }
+      });
+      break;
   }
+}
 
-  Map<String, dynamic> _buildPayload() {
-    switch (_type) {
-      case 'YES_NO':
-        return {'item_id': _id, 'answer_yes_no': _yesNo ?? 'NO'};
-      case 'RATING':
-        return {'item_id': _id, 'rating_value': int.tryParse(_textController.text) ?? 0};
-      case 'COUNT':
-        return {'item_id': _id, 'count_value': int.tryParse(_textController.text) ?? 0};
-      case 'TEXT':
-        return {'item_id': _id, 'answer_text': _textController.text};
-      case 'REPORT':
-      case 'CONDITION':
-        return {'item_id': _id, 'answer_text': _textController.text, 'files': _files};
-      case 'PHOTO':
-        return {'item_id': _id, 'files': _files};
-      case 'CHECKLIST':
-        final options = (widget.item['options'] as List? ?? []);
-        return {
-          'item_id': _id,
-          'checklist_responses': options.map((opt) {
-            final optId = (opt['id'] as num).toInt();
-            return {'option_id': optId, 'checked': _checkedOptions[optId] ?? false};
-          }).toList(),
-        };
-      default:
-        return {'item_id': _id};
-    }
+
+Map<String, dynamic> _buildPayload() {
+  switch (_type) {
+    case 'YES_NO':
+      return {'item_id': _id, 'answer_yes_no': _yesNo ?? 'NO', 'files': _files};
+    case 'RATING':
+      return {'item_id': _id, 'rating_value': int.tryParse(_textController.text) ?? 0, 'files': _files};
+    case 'COUNT':
+      return {'item_id': _id, 'count_value': int.tryParse(_textController.text) ?? 0, 'files': _files};
+    case 'TEXT':
+      return {'item_id': _id, 'answer_text': _textController.text, 'files': _files};
+    case 'REPORT':
+    case 'CONDITION':
+      return {'item_id': _id, 'answer_text': _textController.text, 'files': _files};
+    case 'PHOTO':
+      return {'item_id': _id, 'files': _files};
+    case 'CHECKLIST':
+      final options = (widget.item['options'] as List? ?? []);
+      return {
+        'item_id': _id,
+        'checklist_responses': options.map((opt) {
+          final optId = (opt['id'] as num).toInt();
+          return {'option_id': optId, 'checked': _checkedOptions[optId] ?? false};
+        }).toList(),
+        'files': _files,
+      };
+    default:
+      return {'item_id': _id};
   }
+}
+
 
   void _commit() {
     if (_readOnly) return;
