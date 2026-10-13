@@ -755,7 +755,7 @@ Positioned(
                            _InfoRow(
                               icon: Icons.info_outline_rounded,
                               label: 'App version',
-                              value: '1.0.8',
+                              value: '1.0.9',
                             ),
                         ],
                       ),
