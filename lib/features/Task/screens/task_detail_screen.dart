@@ -881,49 +881,43 @@ bool get _isOverdue {
 
                           if (_lastTotalFormatted != null || _lastBillable != null)
                             _buildSessionSummary(),
+                          
                           // ── Requirements (auto-shown when task is started or completed) ──
-                          if (_isTimerRunning || _isCompleted) ...[
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _buildSectionHeader('Requirements'),
-                                const SizedBox(height: 14),
-                                TaskSectionsAccordion(
-                                  key: _accordionKey,
-                                  taskId: widget.task.id,
-                                  readOnly: _isCompleted,
-                                  onProgressChanged: (sections) => setState(() => _taskSections = sections),
-                                ),
-                                const SizedBox(height: 20),
-                                if (!_isCompleted && _isTimerRunning && _hasRequirements)
-                                  SizedBox(
-                                    width: double.infinity,
-                                    height: 52,
-                                    child: ElevatedButton.icon(
-                                      onPressed: _isSubmittingRequirements ? null : _onSubmitRequirementsPressed,
-                                      icon: _isSubmittingRequirements
-                                          ? const SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
-                                            )
-                                          : const Icon(Icons.assignment_turned_in_rounded, size: 22),
-                                      label: Text(
-                                        _isSubmittingRequirements ? 'Submitting...' : 'Submit Requirements',
-                                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF43A047),
-                                        foregroundColor: Colors.white,
-                                        elevation: 0,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                      ),
-                                    ),
-                                  ),
-                                const SizedBox(height: 32),
-                              ],
-                            ),
-                          ],
+                          Offstage(
+  offstage: !(_isTimerRunning || _isCompleted),
+  child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _buildSectionHeader('Requirements'),
+      const SizedBox(height: 14),
+      TaskSectionsAccordion(
+        key: _accordionKey,
+        taskId: widget.task.id,
+        readOnly: _isCompleted || !_isTimerRunning,
+        onProgressChanged: (sections) => setState(() => _taskSections = sections),
+      ),
+      const SizedBox(height: 20),
+      if (!_isCompleted && _isTimerRunning && _hasRequirements)
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton.icon(
+            onPressed: _isSubmittingRequirements ? null : _onSubmitRequirementsPressed,
+            icon: const Icon(Icons.assignment_turned_in_rounded, size: 22),
+            label: const Text('Submit Requirements',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF43A047),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+        ),
+      const SizedBox(height: 32),
+    ],
+  ),
+),
 
 
                           _buildSectionHeader('Comments'),

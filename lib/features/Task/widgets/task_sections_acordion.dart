@@ -39,6 +39,7 @@ class TaskSectionsAccordionState extends State<TaskSectionsAccordion> {
 
   // item id (string) -> saved answer data, as returned by /responses
   final Map<String, dynamic> _answers = {};
+  final Map<String, Map<String, dynamic>> _lastPayloads = {};
   final Set<String> _answeredItemIds = {};
 
   ScrollPosition? _scrollPosition;
@@ -87,6 +88,15 @@ class TaskSectionsAccordionState extends State<TaskSectionsAccordion> {
       }
     }
   }
+
+  Future<void> _saveWithRetry(int taskId, Map<String, dynamic> payload, {int attempt = 0}) async {
+  final result = await ApiController.saveTaskItem(taskId: taskId, payload: payload);
+  if (result['success'] == true) return;
+  if (attempt < 3) {
+    await Future.delayed(Duration(seconds: 3 * (attempt + 1)));
+    return _saveWithRetry(taskId, payload, attempt: attempt + 1);
+  }
+}
 
 Future<void> _loadSections() async {
   setState(() {
@@ -221,7 +231,13 @@ Future<void> _loadSections() async {
         final data = Map<String, dynamic>.from(result['data'] ?? {});
         setState(() {
           data.forEach((key, value) {
-            _answers[key] = value;
+            final incoming = Map<String, dynamic>.from(value as Map);
+            final localFiles = ((_answers[key] as Map?)?['files'] as List?) ?? const [];
+            final serverFiles = (incoming['files'] as List?) ?? const [];
+            if (serverFiles.isEmpty && localFiles.isNotEmpty) {
+              incoming['files'] = localFiles;
+            }
+            _answers[key] = incoming;
             _answeredItemIds.add(key);
           });
         });
@@ -254,20 +270,19 @@ Future<void> _loadSections() async {
       }
     }
 
+    _lastPayloads[itemId] = Map<String, dynamic>.from(payload);
     _pendingSaveCount++;
-    ApiController.saveTaskItem(taskId: widget.taskId, payload: payload).then((result) {
-      _pendingSaveCount = _pendingSaveCount > 0 ? _pendingSaveCount - 1 : 0;
-      if (!mounted) return;
-      if (result['success'] != true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Failed to save answer'),
-            backgroundColor: const Color(0xFFFF6B6B),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    });
+
+
+    _saveWithRetry(widget.taskId, payload).whenComplete(() {
+  _pendingSaveCount = _pendingSaveCount > 0 ? _pendingSaveCount - 1 : 0;
+});
+
+
+  
+  
+  
+  
   }
 
     /// Converts a /save-item request payload into the same shape /responses
@@ -310,6 +325,10 @@ Map<String, dynamic> _normalizePayloadToAnswer(Map<String, dynamic> payload) {
       await Future.delayed(const Duration(milliseconds: 150));
     }
   }
+
+  List<Map<String, dynamic>> buildSubmitResponses() {
+  return _lastPayloads.values.map((p) => Map<String, dynamic>.from(p)).toList();
+}
 
   /// Finds the next incomplete section (in display order), makes sure its
   /// items are loaded far enough to find an unanswered one (paginating if
@@ -568,6 +587,8 @@ class _ItemCardState extends State<_ItemCard> {
   bool get _imageMandatory => widget.item['image_mandatory'] == true;
   bool get _readOnly => widget.readOnly;
 
+  
+
   @override
   void initState() {
     super.initState();
@@ -656,13 +677,17 @@ Map<String, dynamic> _buildPayload() {
       return {'item_id': _id, 'answer_text': _textController.text, 'files': _files};
     case 'PHOTO':
       return {'item_id': _id, 'files': _files};
-    case 'CHECKLIST':
+     case 'CHECKLIST':
       final options = (widget.item['options'] as List? ?? []);
       return {
         'item_id': _id,
         'checklist_responses': options.map((opt) {
           final optId = (opt['id'] as num).toInt();
-          return {'option_id': optId, 'checked': _checkedOptions[optId] ?? false};
+          return {
+            'option_id': optId,
+            'checked': _checkedOptions[optId] ?? false,
+            'files': _files,
+          };
         }).toList(),
         'files': _files,
       };
