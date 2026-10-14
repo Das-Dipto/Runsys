@@ -337,7 +337,7 @@ TopMessage.warning(context, 'Requirements need to be filled');
                           // 2. Submit the task.
                           final result = await ApiController.submitTask(
                             taskId: widget.task.id,
-                            responses: const [],
+                            responses: _accordionKey.currentState?.buildSubmitResponses() ?? const [],
                             timeLogId: _currentLogId,
                             remarks: remarksCtrl.text,
                             comment: commentCtrl.text,

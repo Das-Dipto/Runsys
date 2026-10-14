@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:image_cropper/image_cropper.dart';
 import '../../Api/api_controller.dart';
+import 'package:flutter/services.dart';
 
 class TaskSectionsAccordion extends StatefulWidget {
   final int taskId;
@@ -255,7 +256,10 @@ Future<void> _loadSections() async {
     // NEW: cache the answer locally in the same shape /responses uses,
     // so re-expanding a collapsed section (which rebuilds _ItemCard from
     // scratch) can prefill correctly without waiting on a server refetch.
-    _answers[itemId] = _normalizePayloadToAnswer(payload);
+     _answers[itemId] = {
+      ..._normalizePayloadToAnswer(payload),
+      'note': payload['note'] ?? '',
+    };
 
     if (firstTimeAnswered) {
       final idx = _sections.indexWhere((s) => (s['id'] as num).toInt() == sectionId);
@@ -547,6 +551,23 @@ Map<String, dynamic> _normalizePayloadToAnswer(Map<String, dynamic> payload) {
   }
 }
 
+// Blocks input beyond the limit and tells the card to show a message.
+class _NoteLengthFormatter extends TextInputFormatter {
+  final int maxLength;
+  final VoidCallback onLimitReached;
+
+  _NoteLengthFormatter(this.maxLength, this.onLimitReached);
+
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    if (newValue.text.length > maxLength) {
+      onLimitReached();
+      return oldValue;
+    }
+    return newValue;
+  }
+}
+
 // ── Single item card ─────────────────────────────────────────────────────
 class _ItemCard extends StatefulWidget {
   final Map<String, dynamic> item;
@@ -573,6 +594,10 @@ class _ItemCardState extends State<_ItemCard> {
   static const Color _textSec = Color(0xFF8A8A9A);
 
   final _picker = ImagePicker();
+  final _noteController = TextEditingController();
+  static const int _noteMaxLength = 150;
+  late final _NoteLengthFormatter _noteFormatter =
+      _NoteLengthFormatter(_noteMaxLength, _showNoteLimitMessage);
   final _textController = TextEditingController();
   Timer? _debounce;
 
@@ -615,6 +640,7 @@ class _ItemCardState extends State<_ItemCard> {
   void dispose() {
     _debounce?.cancel();
     _textController.dispose();
+    _noteController.dispose();
     super.dispose();
   }
 
@@ -622,6 +648,8 @@ void _prefill() {
   final answer = widget.existingAnswer;
   if (answer == null) return;
   _isSaved = true;
+
+  _noteController.text = (answer['note'] ?? '').toString();
 
   // Files: restore for ALL types (server may return maps or plain URL strings)
   final rawFiles = (answer['files'] as List?) ?? const [];
@@ -700,7 +728,23 @@ Map<String, dynamic> _buildPayload() {
   void _commit() {
     if (_readOnly) return;
     setState(() => _isSaved = true);
-    widget.onAnswered(_buildPayload());
+    final payload = _buildPayload();
+    payload['note'] = _noteController.text.trim();
+    widget.onAnswered(payload);
+  }
+
+    void _showNoteLimitMessage() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Note can be up to 150 characters only.'),
+        backgroundColor: const Color(0xFF1E88E5),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
   }
 
   // Debounced commit for free-typed text fields, so we don't fire a save
@@ -926,6 +970,24 @@ Map<String, dynamic> _buildPayload() {
           if (showImageUploader) ...[
             const SizedBox(height: 12),
             _buildImageUploader(),
+          ],
+                    if (_isSaved) ...[
+            const SizedBox(height: 12),
+            const Text(
+              'Note',
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: _textSec),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _noteController,
+              enabled: !_readOnly,
+              minLines: 1,
+              maxLines: 3,
+              style: const TextStyle(fontSize: 14, color: Colors.white),
+              inputFormatters: [_noteFormatter],
+              onChanged: (_) => _onTextChanged(),
+              decoration: _decoration('Add a note (max 150 characters)'),
+            ),
           ],
           if (_isSaved) ...[
             const SizedBox(height: 12),
