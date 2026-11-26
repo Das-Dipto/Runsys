@@ -412,7 +412,7 @@ void _showForceUpdateDialog(Upgrader upgrader) {
                     color: orange.withOpacity(0.06),
                   ),
                   child: Text(
-                    'v 1.0.10',
+                    'v 1.0.11',
                     style: TextStyle(
                       fontSize: 11,
                       color: orange.withOpacity(0.55),
