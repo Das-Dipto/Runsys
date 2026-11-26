@@ -11,7 +11,8 @@ publish_to: 'none'
 # version: 1.0.7+8
 # version: 1.0.8+9
 # version: 1.0.9+10
-version: 1.0.10+11
+# version: 1.0.10+11
+version: 1.0.11+12
 
 environment:
   sdk: ^3.10.8

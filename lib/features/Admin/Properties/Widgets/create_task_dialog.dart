@@ -4,13 +4,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../Api/api_controller.dart';
 
 class CreateTaskDialog extends StatefulWidget {
-  final int propertyId;
-  final String propertyName;
+  final int? propertyId;
+  final String? propertyName;
 
   const CreateTaskDialog({
     super.key,
-    required this.propertyId,
-    required this.propertyName,
+    this.propertyId,
+    this.propertyName,
   });
 
   @override
@@ -67,6 +67,43 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
 
   Map<String, dynamic>? _requestedBy;
 
+   // ── Rate type mapping (UI label -> backend value) ───────────────────────
+  final Map<String, String> _rateTypeMap = {
+    'Hourly': 'hourly',
+    'Flat Rate': 'flat', // change if the backend wants a different value
+  };
+
+  // ── Snackbar that shows ABOVE the dialog ────────────────────────────────
+  final GlobalKey<ScaffoldMessengerState> _messengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+
+  void _showMsg(String msg, {bool error = true}) {
+    final m = _messengerKey.currentState;
+    if (m == null) return;
+    m.hideCurrentSnackBar();
+    m.showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              error ? Icons.error_outline : Icons.check_circle_outline,
+              color: Colors.white,
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(msg)),
+          ],
+        ),
+        backgroundColor:
+            error ? const Color(0xFFB91C1C) : Colors.green.shade700,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 90),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
   // ── Helpers ─────────────────────────────────────────────────────────────
   List<dynamic> get _currentTemplates =>
       _selectedDepartment?['task_templates'] as List<dynamic>? ?? [];
@@ -83,14 +120,16 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
     {'key': 'urgent', 'label': 'Urgent', 'icon': Icons.notification_important_rounded,     'color': Color(0xFF4A1010), 'accent': Color(0xFFEF4444)},
   ];
 
-  @override
-  void initState() {
-    super.initState();
+@override
+void initState() {
+  super.initState();
+  if (widget.propertyId != null && widget.propertyName != null) {
     _selectedProperties = [
       {'id': widget.propertyId, 'name': widget.propertyName}
     ];
-    _fetchAll();
   }
+  _fetchAll();
+}
 
   Future<void> _fetchAll() async {
     await Future.wait([
@@ -209,23 +248,16 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
 
   // ── Create Task ──────────────────────────────────────────────────────────
   Future<void> _onCreateTask() async {
-    if (_selectedProperties.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Please select at least one property.')),
-      );
+       if (_selectedProperties.isEmpty) {
+      _showMsg('Please select at least one property.');
       return;
     }
     if (_selectedDepartment == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a department.')),
-      );
+      _showMsg('Please select a department.');
       return;
     }
     if (_titleController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Task title is required.')),
-      );
+      _showMsg('Task title is required.');
       return;
     }
 
@@ -278,7 +310,7 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
       'description': _descController.text.trim(),
       'priority': _priority,
       'rate': rate,
-      'rate_type': _rateType.toLowerCase().replaceAll(' ', '_'),
+      'rate_type': _rateTypeMap[_rateType],
       'estimated_time': formattedEstimatedTime,
       'due_date': formattedDueDate,
       'due_time': formattedDueTime,
@@ -298,21 +330,16 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
     setState(() => _isCreating = false);
 
     if (result['success'] == true) {
+      final rootMessenger = ScaffoldMessenger.of(context);
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
+      rootMessenger.showSnackBar(
         const SnackBar(
           content: Text('Task created successfully!'),
           backgroundColor: Colors.green,
         ),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              Text(result['message'] ?? 'Failed to create task.'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      _showMsg(result['message']?.toString() ?? 'Failed to create task.');
     }
   }
 
@@ -325,430 +352,378 @@ class _CreateTaskDialogState extends State<CreateTaskDialog> {
     super.dispose();
   }
 
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: _bg,
-      shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      child: SizedBox(
-        width: double.infinity,
-        height: MediaQuery.of(context).size.height * 0.9,
-        child: Column(
-          children: [
-            _buildHeader(),
-            const Divider(color: _border, height: 1),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-
-                    // ── Properties ──────────────────────────────────────
-                    _label('Properties', required: true),
-                    const SizedBox(height: 8),
-                    _buildMultiSelectChips(
-                      selectedItems: _selectedProperties,
-                      allItems: _allProperties
-                          .map((p) =>
-                              {'id': p['id'], 'name': p['name']})
-                          .toList(),
-                      labelKey: 'name',
-                      icon: Icons.home_rounded,
-                      hint: '+ Select properties',
-                      onChanged: (list) =>
-                          setState(() => _selectedProperties = list),
-                      loading: _loadingProps,
-                    ),
-                    const SizedBox(height: 16),
-
-                    // ── Department ──────────────────────────────────────
-                    _label('Department', required: true),
-                    const SizedBox(height: 8),
-                    _loadingDepts
-                        ? _loadingWidget()
-                        : _buildDropdown(
-                            value: _selectedDepartment?['name'],
-                            hint: 'Select department',
-                            items: _departments
-                                .map((d) => d['name'] as String)
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: ScaffoldMessenger(
+          key: _messengerKey,
+          child: Scaffold(
+            backgroundColor: _bg,
+            body: SizedBox(
+              width: double.infinity,
+              height: MediaQuery.of(context).size.height * 0.9,
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  const Divider(color: _border, height: 1),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // ── Properties ──
+                          _label('Properties', required: true),
+                          const SizedBox(height: 8),
+                          _buildMultiSelectChips(
+                            selectedItems: _selectedProperties,
+                            allItems: _allProperties
+                                .map((p) => {'id': p['id'], 'name': p['name']})
                                 .toList(),
-                            onChanged: (val) {
-                              final dept = _departments.firstWhere(
-                                  (d) => d['name'] == val,
-                                  orElse: () => null);
-                              if (dept != null)
-                                _onDepartmentSelected(dept);
-                            },
+                            labelKey: 'name',
+                            icon: Icons.home_rounded,
+                            hint: '+ Select properties',
+                            onChanged: (list) =>
+                                setState(() => _selectedProperties = list),
+                            loading: _loadingProps,
                           ),
-                    const SizedBox(height: 20),
+                          const SizedBox(height: 16),
 
-                    // ── TASK DETAILS ────────────────────────────────────
-                    _sectionHeader(
-                        Icons.adjust_rounded, 'TASK DETAILS', _blue),
-                    const SizedBox(height: 16),
+                          // ── Department ──
+                          _label('Department', required: true),
+                          const SizedBox(height: 8),
+                          _loadingDepts
+                              ? _loadingWidget()
+                              : _buildDropdown(
+                                  value: _selectedDepartment?['name'],
+                                  hint: 'Select department',
+                                  items: _departments
+                                      .map((d) => d['name'] as String)
+                                      .toList(),
+                                  onChanged: (val) {
+                                    final dept = _departments.firstWhere(
+                                        (d) => d['name'] == val,
+                                        orElse: () => null);
+                                    if (dept != null) _onDepartmentSelected(dept);
+                                  },
+                                ),
+                          const SizedBox(height: 20),
 
-                    _label('Priority Level'),
-                    const SizedBox(height: 10),
-                    _buildPrioritySelector(),
-                    const SizedBox(height: 16),
+                          // ── TASK DETAILS ──
+                          _sectionHeader(
+                              Icons.adjust_rounded, 'TASK DETAILS', _blue),
+                          const SizedBox(height: 16),
 
-                    // Template + Subdepartment
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                          _label('Priority Level'),
+                          const SizedBox(height: 10),
+                          _buildPrioritySelector(),
+                          const SizedBox(height: 16),
+
+                          // Template + Subdepartment
+                          Row(
                             children: [
-                              _label('Template'),
-                              const SizedBox(height: 8),
-                              _selectedDepartment == null
-                                  ? _buildDropdown(
-                                      value: null,
-                                      hint: 'Select template',
-                                      items: [],
-                                      onChanged: (_) {})
-                                  : _buildDropdown(
-                                      value: _selectedTemplate?[
-                                          'title'],
-                                      hint: 'Select template',
-                                      items: _currentTemplates
-                                          .map((t) =>
-                                              t['title'] as String)
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _label('Template'),
+                                    const SizedBox(height: 8),
+                                    _selectedDepartment == null
+                                        ? _buildDropdown(
+                                            value: null,
+                                            hint: 'Select template',
+                                            items: [],
+                                            onChanged: (_) {})
+                                        : _buildDropdown(
+                                            value: _selectedTemplate?['title'],
+                                            hint: 'Select template',
+                                            items: _currentTemplates
+                                                .map((t) => t['title'] as String)
+                                                .toList(),
+                                            onChanged: (val) {
+                                              final tpl =
+                                                  _currentTemplates.firstWhere(
+                                                      (t) => t['title'] == val,
+                                                      orElse: () => null);
+                                              if (tpl != null) {
+                                                _onTemplateSelected(tpl);
+                                              }
+                                            },
+                                          ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _label('Subdepartment'),
+                                    const SizedBox(height: 8),
+                                    _buildDropdown(
+                                      value: _selectedSubdepartment?['name'],
+                                      hint: 'None',
+                                      items: _currentSubdepts
+                                          .map((s) => s['name'] as String)
                                           .toList(),
                                       onChanged: (val) {
-                                        final tpl =
-                                            _currentTemplates
-                                                .firstWhere(
-                                                    (t) =>
-                                                        t['title'] ==
-                                                        val,
-                                                    orElse: () =>
-                                                        null);
-                                        if (tpl != null)
-                                          _onTemplateSelected(tpl);
+                                        final sub = _currentSubdepts.firstWhere(
+                                            (s) => s['name'] == val,
+                                            orElse: () => null);
+                                        setState(
+                                            () => _selectedSubdepartment = sub);
                                       },
                                     ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              _label('Subdepartment'),
-                              const SizedBox(height: 8),
-                              _buildDropdown(
-                                value:
-                                    _selectedSubdepartment?['name'],
-                                hint: 'None',
-                                items: _currentSubdepts
-                                    .map((s) => s['name'] as String)
-                                    .toList(),
-                                onChanged: (val) {
-                                  final sub =
-                                      _currentSubdepts.firstWhere(
-                                          (s) => s['name'] == val,
-                                          orElse: () => null);
-                                  setState(() =>
-                                      _selectedSubdepartment = sub);
-                                },
+                                  ],
+                                ),
                               ),
                             ],
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
+                          const SizedBox(height: 16),
 
-                    // Task Title
-                    _label('Task Title', required: true),
-                    const SizedBox(height: 8),
-                    _textField(_titleController,
-                        'Enter a descriptive title...'),
-                    const SizedBox(height: 16),
+                          // Task Title
+                          _label('Task Title', required: true),
+                          const SizedBox(height: 8),
+                          _textField(
+                              _titleController, 'Enter a descriptive title...'),
+                          const SizedBox(height: 16),
 
-                    // Description
-                    _label('Description'),
-                    const SizedBox(height: 8),
-                    _textField(
-                        _descController,
-                        'Add detailed description, instructions, or notes...',
-                        maxLines: 4),
-                    const SizedBox(height: 16),
+                          // Description
+                          _label('Description'),
+                          const SizedBox(height: 8),
+                          _textField(
+                              _descController,
+                              'Add detailed description, instructions, or notes...',
+                              maxLines: 4),
+                          const SizedBox(height: 16),
 
-                    // Rate + Rate Type + Est. Time
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                          // Rate (hourly) + Est. Time
+                          Row(
                             children: [
-                              _label('Rate'),
-                              const SizedBox(height: 8),
-                              _buildRateField(),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 2,
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              _label(''),
-                              const SizedBox(height: 8),
-                              _buildDropdown(
-                                value: _rateType,
-                                hint: '',
-                                items: ['Hourly', 'Flat Rate'],
-                                onChanged: (v) => setState(
-                                    () => _rateType = v ?? 'Hourly'),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _label('Rate (per hour)'),
+                                    const SizedBox(height: 8),
+                                    _buildRateField(),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _label('Est. Time'),
+                                    const SizedBox(height: 8),
+                                    _textField(_estTimeController, 'HH:MM',
+                                        keyboardType: TextInputType.datetime),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 3,
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              _label('Est. Time'),
-                              const SizedBox(height: 8),
-                              _textField(_estTimeController, 'HH:MM',
-                                  keyboardType:
-                                      TextInputType.datetime),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
+                          const SizedBox(height: 20),
 
-                    // ── SCHEDULE ────────────────────────────────────────
-                    _sectionHeader(Icons.calendar_month_rounded,
-                        'SCHEDULE', _blue),
-                    const SizedBox(height: 14),
+                          // ── SCHEDULE ──
+                          _sectionHeader(
+                              Icons.calendar_month_rounded, 'SCHEDULE', _blue),
+                          const SizedBox(height: 14),
 
-                    _buildCheckboxRow(
-                      label: 'Make this a repeating task',
-                      value: _isRepeating,
-                      onChanged: (v) =>
-                          setState(() => _isRepeating = v ?? false),
-                    ),
-                    const SizedBox(height: 14),
-
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              _label('Due Date'),
-                              const SizedBox(height: 8),
-                              _buildDateField(),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              _label('Time'),
-                              const SizedBox(height: 8),
-                              _buildTimeField(),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-
-                    // ── ASSIGNEES ───────────────────────────────────────
-                    _sectionHeader(
-                        Icons.people_alt_rounded, 'ASSIGNEES', _blue),
-                    const SizedBox(height: 14),
-                    _loadingUsers
-                        ? _loadingWidget()
-                        : _buildMultiSelectChips(
-                            selectedItems: _selectedAssignees,
-                            allItems: _users
-                                .map((u) => {
-                                      'id': u['id'],
-                                      'name': u['full_name']
-                                    })
-                                .toList(),
-                            labelKey: 'name',
-                            icon: Icons.person_add_rounded,
-                            hint: '+ Add assignee',
-                            onChanged: (list) => setState(
-                                () => _selectedAssignees = list),
-                            loading: false,
-                          ),
-                    const SizedBox(height: 20),
-
-                    // ── ATTACHMENTS ─────────────────────────────────────
-                    // _sectionHeader(Icons.attach_file_rounded,
-                    //     'ATTACHMENTS', _blue),
-                    // const SizedBox(height: 14),
-                    // Row(
-                    //   children: [
-                    //     Expanded(
-                    //         child: _outlineButton(
-                    //             Icons.upload_rounded, 'Upload', () {})),
-                    //     const SizedBox(width: 12),
-                    //     Expanded(
-                    //         child: _outlineButton(
-                    //             Icons.link_rounded, 'Link', () {})),
-                    //   ],
-                    // ),
-                    const SizedBox(height: 20),
-
-                    // ── TAGS ────────────────────────────────────────────
-                    _sectionHeader(
-                        Icons.label_rounded, 'TAGS', _blue),
-                    const SizedBox(height: 14),
-                    _loadingTags
-                        ? _loadingWidget()
-                        : _buildMultiSelectChips(
-                            selectedItems: _selectedTags,
-                            allItems: _tags
-                                .map((t) => {
-                                      'id': t['id'],
-                                      'name': t['name']
-                                    })
-                                .toList(),
-                            labelKey: 'name',
-                            icon: Icons.add_rounded,
-                            hint: 'Add tags...',
-                            onChanged: (list) =>
-                                setState(() => _selectedTags = list),
-                            loading: false,
-                          ),
-                    const SizedBox(height: 20),
-
-                    // Watch Task + Text Updates
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF16161F),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: _border),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildToggleRow(
-                            icon: Icons.visibility_rounded,
-                            title: 'Watch Task',
-                            subtitle: 'Get notified about updates',
-                            value: _watchTask,
+                          _buildCheckboxRow(
+                            label: 'Make this a repeating task',
+                            value: _isRepeating,
                             onChanged: (v) =>
-                                setState(() => _watchTask = v),
-                            showDivider: true,
+                                setState(() => _isRepeating = v ?? false),
                           ),
-                          _buildToggleRow(
-                            icon: Icons.message_rounded,
-                            title: 'Text Updates',
-                            subtitle: 'Send SMS notifications',
-                            value: _textUpdates,
-                            onChanged: (v) =>
-                                setState(() => _textUpdates = v),
-                            showDivider: false,
+                          const SizedBox(height: 14),
+
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _label('Due Date'),
+                                    const SizedBox(height: 8),
+                                    _buildDateField(),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _label('Time'),
+                                    const SizedBox(height: 8),
+                                    _buildTimeField(),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
+                          const SizedBox(height: 20),
+
+                          // ── ASSIGNEES ──
+                          _sectionHeader(
+                              Icons.people_alt_rounded, 'ASSIGNEES', _blue),
+                          const SizedBox(height: 14),
+                          _loadingUsers
+                              ? _loadingWidget()
+                              : _buildMultiSelectChips(
+                                  selectedItems: _selectedAssignees,
+                                  allItems: _users
+                                      .map((u) => {
+                                            'id': u['id'],
+                                            'name': u['full_name']
+                                          })
+                                      .toList(),
+                                  labelKey: 'name',
+                                  icon: Icons.person_add_rounded,
+                                  hint: '+ Add assignee',
+                                  onChanged: (list) => setState(
+                                      () => _selectedAssignees = list),
+                                  loading: false,
+                                ),
+                          const SizedBox(height: 20),
+
+                          // ── TAGS ──
+                          _sectionHeader(Icons.label_rounded, 'TAGS', _blue),
+                          const SizedBox(height: 14),
+                          _loadingTags
+                              ? _loadingWidget()
+                              : _buildMultiSelectChips(
+                                  selectedItems: _selectedTags,
+                                  allItems: _tags
+                                      .map((t) =>
+                                          {'id': t['id'], 'name': t['name']})
+                                      .toList(),
+                                  labelKey: 'name',
+                                  icon: Icons.add_rounded,
+                                  hint: 'Add tags...',
+                                  onChanged: (list) =>
+                                      setState(() => _selectedTags = list),
+                                  loading: false,
+                                ),
+                          const SizedBox(height: 20),
+
+                          // Watch Task + Text Updates
+                          Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF16161F),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: _border),
+                            ),
+                            child: Column(
+                              children: [
+                                _buildToggleRow(
+                                  icon: Icons.visibility_rounded,
+                                  title: 'Watch Task',
+                                  subtitle: 'Get notified about updates',
+                                  value: _watchTask,
+                                  onChanged: (v) =>
+                                      setState(() => _watchTask = v),
+                                  showDivider: true,
+                                ),
+                                _buildToggleRow(
+                                  icon: Icons.message_rounded,
+                                  title: 'Text Updates',
+                                  subtitle: 'Send SMS notifications',
+                                  value: _textUpdates,
+                                  onChanged: (v) =>
+                                      setState(() => _textUpdates = v),
+                                  showDivider: false,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+
+                          // ── Requested By ──
+                          _label('Requested By'),
+                          const SizedBox(height: 8),
+                          _buildDropdown(
+                            value: _requestedBy?['full_name'],
+                            hint: 'Select requester',
+                            items: _users
+                                .map((u) => u['full_name'] as String)
+                                .toList(),
+                            onChanged: (val) {
+                              final u = _users.firstWhere(
+                                  (u) => u['full_name'] == val,
+                                  orElse: () => null);
+                              setState(() => _requestedBy = u);
+                            },
+                          ),
+                          const SizedBox(height: 30),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 20),
-
-                    // ── Requested By ────────────────────────────────────
-                    _label('Requested By'),
-                    const SizedBox(height: 8),
-                    _buildDropdown(
-                      value: _requestedBy?['full_name'],
-                      hint: 'Select requester',
-                      items: _users
-                          .map((u) => u['full_name'] as String)
-                          .toList(),
-                      onChanged: (val) {
-                        final u = _users.firstWhere(
-                            (u) => u['full_name'] == val,
-                            orElse: () => null);
-                        setState(() => _requestedBy = u);
-                      },
-                    ),
-                    const SizedBox(height: 30),
-                  ],
-                ),
-              ),
-            ),
-
-            // ── Bottom buttons ──────────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: _border)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _isCreating
-                          ? null
-                          : () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: _textSec,
-                        side: const BorderSide(color: _border),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                      ),
-                      child: const Text('Cancel'),
-                    ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isCreating ? null : _onCreateTask,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _orange,
-                        foregroundColor: Colors.white,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
-                      ),
-                      child: _isCreating
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('Create Task',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w700)),
+
+                  // ── Bottom buttons ──
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                    decoration: const BoxDecoration(
+                      border: Border(top: BorderSide(color: _border)),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _isCreating
+                                ? null
+                                : () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _textSec,
+                              side: const BorderSide(color: _border),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: _isCreating ? null : _onCreateTask,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: _orange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: _isCreating
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text('Create Task',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

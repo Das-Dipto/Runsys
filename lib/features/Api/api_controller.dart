@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../Home/Widgets/sort_bottom_sheet.dart';
 import '../Home/Widgets/filter_bottom_sheet.dart';
+import 'package:flutter/foundation.dart';
 
 class ApiController {
   static const String _baseUrl = 'https://runsysapi.runsys.app';
@@ -1344,40 +1345,55 @@ static Future<Map<String, dynamic>> createTask(Map<String, dynamic> payload) asy
   try {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
- 
     final url = Uri.parse('$_baseUrl/api/v1/tasks');
- 
+    final body = jsonEncode(payload);
+
+    debugPrint('➡️ createTask URL: $url');
+    debugPrint('➡️ createTask PAYLOAD: $body');
+
     final response = await http.post(
       url,
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
-      body: jsonEncode(payload),
+      body: body,
     );
 
-    // ── Handle 429 BEFORE jsonDecode — body is plain text, not JSON ──
+    debugPrint('⬅️ createTask STATUS: ${response.statusCode}');
+    debugPrint('⬅️ createTask BODY: ${response.body}');
+
     if (response.statusCode == 429) {
-      print("🚫 Backend rate limit hit on startTimeLog: ${response.body}");
       return {
         'success': false,
         'message': 'Too many requests from this IP, please try again after 5 minutes.',
       };
     }
- 
-    final data = jsonDecode(response.body);
- 
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      return {'success': true, 'data': data};
-    } else {
+
+    Map<String, dynamic> data;
+    try {
+      data = jsonDecode(response.body);
+    } catch (_) {
       return {
         'success': false,
-        'message': data['message'] ?? 'Failed to create task',
+        'message': 'Server error (${response.statusCode}). Non-JSON response.',
       };
     }
-  } catch (e) {
-    print("createTask error: $e");
-    return {'success': false, 'message': 'Network error. Please check your connection.'};
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return {'success': true, 'data': data};
+    }
+
+    // Surface validation details if the backend sends them
+    String msg = data['message']?.toString() ?? 'Failed to create task';
+    final errors = data['errors'];
+    if (errors is List && errors.isNotEmpty) {
+      msg = errors.map((e) => '${e['path']}: ${e['msg']}').join('\n');
+    }
+    return {'success': false, 'message': msg};
+  } catch (e, st) {
+    debugPrint('❌ createTask exception: $e\n$st');
+    return {'success': false, 'message': 'Network error: $e'};
   }
 }
 

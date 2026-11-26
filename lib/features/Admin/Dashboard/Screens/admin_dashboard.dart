@@ -4,7 +4,7 @@ import '../../../Authentication/Providers/auth_providers.dart';
 import '../Widgets/admin_drawer.dart';
 import '../Widgets/admin_task_table.dart';
 import '../Widgets/date_ramge_dialog.dart';
-import '../Widgets/create_task_dialog.dart';
+import '../../Properties/Widgets/create_task_dialog.dart';
 import '../Widgets/task_search_dialog.dart';
 
 class AdminDashboardScreen extends StatefulWidget {

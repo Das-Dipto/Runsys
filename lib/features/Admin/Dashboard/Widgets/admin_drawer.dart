@@ -279,18 +279,18 @@ class AdminDrawer extends StatelessWidget {
               ),
             ),
 
-            _DrawerMenuItem(
-              icon: Icons.domain_rounded,
-              label: 'Properties',
-              isActive: activeMenu == 'Properties',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const PropertiesScreen()),
-                );
-              },
-            ),
+            // _DrawerMenuItem(
+            //   icon: Icons.domain_rounded,
+            //   label: 'Properties',
+            //   isActive: activeMenu == 'Properties',
+            //   onTap: () {
+            //     Navigator.pop(context);
+            //     Navigator.push(
+            //       context,
+            //       MaterialPageRoute(builder: (_) => const PropertiesScreen()),
+            //     );
+            //   },
+            // ),
 
             _DrawerMenuItem(
               icon: Icons.task_alt_rounded,
